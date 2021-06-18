@@ -1,0 +1,59 @@
+version: 2.1
+executors:
+  exectr:
+    docker:
+      - image: dockerben/cpptemplate:latest
+
+jobs:
+  build:
+    executor: exectr
+    steps:
+      - checkout
+      - run:
+          name: Install vcpkg dependencies
+          command: ./../../vcpkg/vcpkg install fmt doctest
+      - run:
+          name: Create build directories
+          command: |
+            mkdir -p build
+            mv buildutils build/buildutils
+      - run:
+          name: Setup cmake and build artifacts
+          command: |
+            cd build
+            cmake -DCMAKE_TOOLCHAIN_FILE=/vcpkg/scripts/buildsystems/vcpkg.cmake ..
+            cmake --build . --config Release
+      - persist_to_workspace:
+          root: .
+          paths: build
+
+  test:
+    executor: exectr
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Create test directory
+          command: |
+            cd build
+            mkdir -p Test
+      - run:
+          name: Execute Tests
+          command: |
+            cd build
+            ctest --no-compress-output -T Test || true
+      - run:
+          name: Transform test results into JUnit conform notation
+          command: |
+            python3 build/buildutils/ctest2JUnit.py build build/buildutils/CTest2JUnit.xsl > build/Test/results.xml
+      - store_test_results:
+          path: build/Test
+
+workflows:
+  version: 2
+  build-and-test:
+    jobs:
+      - build
+      - test:
+          requires:
+            - build
