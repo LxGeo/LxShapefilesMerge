@@ -1,5 +1,5 @@
-# Repo name
-> Repo description.
+# LxShapefilesMerge
+> A cpp application to merge polygon shapefiles.
 
 [![CircleCI][circleci-badge]][circleci-url]
 [![CodeFactor Grade][codefactor-badge]][codefactor-url]
