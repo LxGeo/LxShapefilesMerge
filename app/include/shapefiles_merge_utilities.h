@@ -9,13 +9,7 @@ namespace LxGeo
 		namespace shapefiles_merge_utils
 		{
 			using namespace GeometryFactoryShared;
-			enum severirity_error_enum
-			{
-				NO_ERROR = 0,
-				SPATIAL_REF_CONFLICT = 1,
-				WRONG_SHAPEFILE_PATH = 2,
-				UNKNOWN_ERROR = 3
-			} severity_error;
+			
 
 			/**
 			*  A method to check requirements before running merging steps.

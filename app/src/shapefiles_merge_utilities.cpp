@@ -20,9 +20,9 @@ namespace LxGeo
 			int check_shapefiles_validity(std::vector<std::string>& all_paths, bool& apply_srs_transform)
 			{
 				BOOST_LOG_TRIVIAL(info) << "Checking shapefiles validity!";
-				int validation_severity = NO_ERROR;
+				int validation_severity = S_NO_ERROR;
 				GDALDataset* dataset = NULL;
-				std::set<OGRSpatialReference> srs_set;
+				std::set<char*> srs_set;
 
 				try {
 					for (size_t i = 0; i < all_paths.size(); ++i) {
@@ -31,17 +31,21 @@ namespace LxGeo
 						dataset = (GDALDataset*)GDALOpenEx(c_dataset_path, GDAL_OF_VECTOR, NULL, NULL, NULL);
 						if (dataset == NULL) {
 							BOOST_LOG_TRIVIAL(warning) << "Input shapefile path: " << c_dataset_path << " is missing";
-							validation_severity = (validation_severity > WRONG_SHAPEFILE_PATH) ? validation_severity : WRONG_SHAPEFILE_PATH;
+							validation_severity = (validation_severity > S_WRONG_SHAPEFILE_PATH) ? validation_severity : S_WRONG_SHAPEFILE_PATH;
 						}
 						else
 						{
 							OGRLayer* layer = dataset->GetLayer(0);
 							OGRSpatialReference* source_srs = layer->GetSpatialRef();
-							srs_set.insert(*source_srs);
+							
+							char* pszWKT = NULL;
+							source_srs->exportToWkt(&pszWKT);
+							srs_set.insert(pszWKT);
+
 							if (srs_set.size() > 1)
 							{
 								BOOST_LOG_TRIVIAL(warning) << "One of the input shapefiles do not share the same SpatialRefSystem!";
-								validation_severity = (validation_severity > SPATIAL_REF_CONFLICT) ? validation_severity : SPATIAL_REF_CONFLICT;
+								validation_severity = (validation_severity > S_SPATIAL_REF_CONFLICT) ? validation_severity : S_SPATIAL_REF_CONFLICT;
 								BOOST_LOG_TRIVIAL(info) << "Applying srs transformation based on the first shapefile srs!";
 								if (params->fix_srs_difference) apply_srs_transform = true;
 							}
@@ -51,7 +55,7 @@ namespace LxGeo
 				catch (std::exception& e) {
 					BOOST_LOG_TRIVIAL(debug) << e.what();
 					BOOST_LOG_TRIVIAL(fatal) << "Fatal error! For a quick resolution keep a copy of input data!";
-					validation_severity = UNKNOWN_ERROR;
+					validation_severity = S_UNKNOWN_ERROR;
 				}
 
 				return validation_severity;
@@ -151,8 +155,8 @@ namespace LxGeo
 										Inexact_Point_2 p2 = R[l+1];
 										// adding to segments
 										all_segments.push_back(Inexact_Segment_2(p1, p2));
-										segment_LID.push_back(size_t(i));
-										segment_PID.push_back(size_t(j));
+										segment_LID.push_back(i);
+										segment_PID.push_back(j);
 										// if two segments share the same ORDinP & PID than at least an outer ring exists.
 										segment_ORDinP.push_back(l);
 									}
@@ -188,16 +192,11 @@ namespace LxGeo
 			{
 				for (size_t i = 0; i < all_segments.size(); ++i) {
 					const Inexact_Segment_2 c_segment = all_segments[i];
-
-					// Computes bbox of each segment
-
-					/*Bbox_2 B = CGAL::bbox_2(c_segment.source(), c_segment.target());
-					double xmin = B.xmin(), xmax = B.xmax(), ymin = B.ymin(), ymax = B.ymax();
-					*/
-					double xmin = std::min(c_segment.source().x(), c_segment.target().x());
-					double xmax = std::max(c_segment.source().x(), c_segment.target().x());
-					double ymin = std::min(c_segment.source().y(), c_segment.target().y());
-					double ymax = std::max(c_segment.source().y(), c_segment.target().y());
+										
+					double xmin = std::min<double>(c_segment.source().x(), c_segment.target().x());
+					double xmax = std::max<double>(c_segment.source().x(), c_segment.target().x());
+					double ymin = std::min<double>(c_segment.source().y(), c_segment.target().y());
+					double ymax = std::max<double>(c_segment.source().y(), c_segment.target().y());
 
 					Boost_Box_2 box(Boost_Point_2(xmin, ymin), Boost_Point_2(xmax, ymax));
 					RT.insert(Boost_Value_2(box, i));
@@ -233,15 +232,6 @@ namespace LxGeo
 
 			}
 
-		
-			
-			//void read_shapefiles(const std::vector<std::string>& all_paths, std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons);
-
-			//void recenter(std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons, Inexact_Vector_2& shift, Bbox_2& bbox);
-
-			//void make_segments(const std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons, std::vector<Inexact_Segment_2>& all_segments);
-
-			//void write_shapefile(const std::string& input_filename, const std::string& output_filename, const std::vector<Polygon_with_attributes*>& polygons);
 		}
 	}
 }

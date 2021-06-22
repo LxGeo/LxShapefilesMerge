@@ -35,7 +35,7 @@ namespace LxGeo
 
 			size_t SegmentGraph::get_min_centrality_vertex_index();
 
-			std::vector<size_t> SegmentGraph::get_connected_vertices_indices(size_t vertex_idx);
+			void SegmentGraph::get_connected_vertices_indices(size_t vertex_idx, std::vector<size_t>& c_connected_vertices_indices);
 
 			void SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices);
 

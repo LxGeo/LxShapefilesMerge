@@ -78,7 +78,7 @@ namespace LxGeo
 
 			std::list<std::string> unknown_args;
 
-			int r = 1;
+			size_t r = 1;
 			while (r < argc) {
 				std::string arg = argv[r];
 				if (arg == "-h" || arg == "--help") {

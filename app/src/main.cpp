@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
 	delete params;
 
 	clock_t t_end = clock();
-	std::cout << "** Elapsed time : " << double(t_end - t_begin) / CLOCKS_PER_SEC << " s." << std::endl;
+	std::cout << "** Elapsed time : " << float(t_end - t_begin) / CLOCKS_PER_SEC << " s." << std::endl;
 
 	return 0;
 }

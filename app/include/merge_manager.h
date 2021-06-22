@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "shapefiles_merge_utilities.h"
 
 namespace LxGeo
 {

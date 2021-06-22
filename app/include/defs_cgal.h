@@ -27,7 +27,7 @@ namespace LxGeo
 		typedef IK::Triangle_2 Inexact_Triangle_2;
 		typedef CGAL::Polygon_2<IK> Inexact_Polygon_2;
 
-		//typedef CGAL::Bbox_2 Bbox_2;
+		typedef CGAL::Bbox_2 Bbox_2;
 		
 		/*
 		typedef CGAL::Simple_cartesian<int>::Point_2 Integer_Point;

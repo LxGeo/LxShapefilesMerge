@@ -81,10 +81,11 @@ namespace LxGeo
 				/*boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
 					boost::get(boost::vertex_index, SG);
 
-				vertex_index_map[c_segment_index] = c_segment_index;*/
+				vertex_index_map[c_segment_index] = c_segment_index;
 
 				boost::property_map<BoostSegmentGraph, boost::vertex_centrality_t>::type centrality_map =
 					boost::get(boost::vertex_centrality, SG);
+				*/
 
 				double normalized_centrality_value = (sum_vertex_centrality / neighborhood_indices.size());
 				//centrality_map[c_segment_index] = normalized_centrality_value;
@@ -166,7 +167,8 @@ namespace LxGeo
 				// Search for minimum centrality_index as a starting group central segment
 				
 				size_t c_central_vertex_node = get_min_centrality_vertex_index();
-				std::vector<size_t> c_connected_vertices_indices = get_connected_vertices_indices(c_central_vertex_node);
+				std::vector<size_t> c_connected_vertices_indices;
+				get_connected_vertices_indices(c_central_vertex_node, c_connected_vertices_indices);
 
 				size_t c_group_id = groupes_count;
 				
@@ -184,17 +186,17 @@ namespace LxGeo
 			return std::min_element(vertcies_centrality.begin(), vertcies_centrality.end()) - vertcies_centrality.begin();
 		}
 
-		std::vector<size_t> SegmentGraph::get_connected_vertices_indices(size_t vertex_idx) {
+		void SegmentGraph::get_connected_vertices_indices(size_t vertex_idx, std::vector<size_t>& c_connected_vertices_indices) {
 
 			boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
 				boost::get(boost::vertex_index, SG);
 
-			std::vector<size_t> connected_vertices_idx = { vertex_idx };
+			c_connected_vertices_indices.push_back( vertex_idx );
 			adjacency_iterator ai, ai_end;
 			for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_idx, SG); ai != ai_end; ++ai) {
-				connected_vertices_idx.push_back(get(vertex_index_map, *ai));
+				c_connected_vertices_indices.push_back(get(vertex_index_map, *ai));
 			}
-			return connected_vertices_idx;
+
 				
 		}
 

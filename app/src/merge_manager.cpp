@@ -32,8 +32,8 @@ namespace LxGeo
 
 			// Checking before ruuning pipeline
 			int validation_severity = pre_check();
-			if (validation_severity >= WRONG_SHAPEFILE_PATH) return;
-			else if (validation_severity == SPATIAL_REF_CONFLICT && !params->fix_srs_difference) return;
+			if (validation_severity >= S_WRONG_SHAPEFILE_PATH) return;
+			else if ((validation_severity == S_SPATIAL_REF_CONFLICT) && !params->fix_srs_difference) return;
 			else BOOST_LOG_TRIVIAL(info) << "Pre check passed succefully!";
 
 			// Loading polygons as segments (to run regularization)

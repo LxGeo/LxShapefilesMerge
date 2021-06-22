@@ -1,6 +1,5 @@
 #pragma once
 #pragma warning( disable : 4251 )
-
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/point.hpp>
 #include <boost/geometry/geometries/box.hpp>
