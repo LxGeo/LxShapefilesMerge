@@ -6,6 +6,7 @@
 #include <list>
 #include <deque>
 #include <vector>
+#include <valarray>
 #include <string>
 #include <queue>
 #include <boost/log/trivial.hpp>
