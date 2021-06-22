@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-
+#include "defs_cgal.h"
 
 namespace LxGeo
 {

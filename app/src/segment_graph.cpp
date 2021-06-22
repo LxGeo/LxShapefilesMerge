@@ -15,14 +15,9 @@ namespace LxGeo
 			std::vector<short int>& segment_LID,
 			std::vector<short int>& segment_PID,
 			std::vector<double>& segment_angle,
-			Boost_RTree_2& segments_tree)
+			Boost_RTree_2& segments_tree): _all_segments(all_segments), _segment_LID(segment_LID), _segment_PID(segment_PID), _segment_angle(segment_angle),
+			_segments_tree(segments_tree)
 		{
-			_all_segments = all_segments;
-			_segment_LID = segment_LID;
-			_segment_PID = segment_PID;
-			_segment_angle = segment_angle;
-			_segments_tree = segments_tree;
-
 			// load weights and thresh from parameters
 			e_distance_weight = params->e_distance_weight;
 			e_angle_weight = params->e_angle_weight;
@@ -65,7 +60,7 @@ namespace LxGeo
 
 				double sum_vertex_centrality = 0;
 				// adding graph edges
-				for (size_t neigh_iter_index; neigh_iter_index < neighborhood_indices.size(); ++neigh_iter_index)
+				for (size_t neigh_iter_index=0; neigh_iter_index < neighborhood_indices.size(); ++neigh_iter_index)
 				{
 
 					size_t neigh_index = neighborhood_indices[neigh_iter_index];

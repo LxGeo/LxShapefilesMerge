@@ -8,11 +8,8 @@ namespace LxGeo
 {
 	namespace LxShapefilesMerge
 	{
-		MergeManager::MergeManager()
+		MergeManager::MergeManager() :all_input_shapefiles(params->paths), output_shapefile(params->output_shapefile)
 		{
-			all_input_shapefiles = params->paths;
-			output_shapefile = params->output_shapefile;
-
 		}
 
 

@@ -151,8 +151,8 @@ namespace LxGeo
 										Inexact_Point_2 p2 = R[l+1];
 										// adding to segments
 										all_segments.push_back(Inexact_Segment_2(p1, p2));
-										segment_LID.push_back(i);
-										segment_PID.push_back(j);
+										segment_LID.push_back(size_t(i));
+										segment_PID.push_back(size_t(j));
 										// if two segments share the same ORDinP & PID than at least an outer ring exists.
 										segment_ORDinP.push_back(l);
 									}
@@ -183,6 +183,28 @@ namespace LxGeo
 
 			}
 
+
+			void make_rtree(const std::vector< Inexact_Segment_2 >& all_segments, Boost_RTree_2& RT)
+			{
+				for (size_t i = 0; i < all_segments.size(); ++i) {
+					const Inexact_Segment_2 c_segment = all_segments[i];
+
+					// Computes bbox of each segment
+
+					/*Bbox_2 B = CGAL::bbox_2(c_segment.source(), c_segment.target());
+					double xmin = B.xmin(), xmax = B.xmax(), ymin = B.ymin(), ymax = B.ymax();
+					*/
+					double xmin = std::min(c_segment.source().x(), c_segment.target().x());
+					double xmax = std::max(c_segment.source().x(), c_segment.target().x());
+					double ymin = std::min(c_segment.source().y(), c_segment.target().y());
+					double ymax = std::max(c_segment.source().y(), c_segment.target().y());
+
+					Boost_Box_2 box(Boost_Point_2(xmin, ymin), Boost_Point_2(xmax, ymax));
+					RT.insert(Boost_Value_2(box, i));
+				}
+			}
+
+
 			void regularize_segments(std::vector<Inexact_Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
@@ -211,24 +233,7 @@ namespace LxGeo
 
 			}
 
-
-
-			void make_rtree(const std::vector< Inexact_Segment_2 >& all_segments, Boost_RTree_2& RT)
-			{
-				for (size_t i = 0; i < all_segments.size(); ++i) {
-					const Inexact_Segment_2 c_segment = all_segments[i];
-
-					// Computes bbox of each segment
-
-					Bbox_2 B = CGAL::bbox_2(c_segment.source(), c_segment.target());
-					double xmin = B.xmin(), xmax = B.xmax(), ymin = B.ymin(), ymax = B.ymax();
-
-					Boost_Box_2 box(Boost_Point_2(xmin, ymin), Boost_Point_2(xmax, ymax));
-					RT.insert(Boost_Value_2(box, i));
-				}
-			}
-
-			
+		
 			
 			//void read_shapefiles(const std::vector<std::string>& all_paths, std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons);
 
