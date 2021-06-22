@@ -3,9 +3,11 @@ project(LxShapefilesMerge)
 
 set(EXECUTABLE_OUTPUT_PATH ../bin/${CMAKE_BUILD_TYPE})
 
-find_package(Boost REQUIRED COMPONENTS filesystem)
+
+
+find_package(Boost REQUIRED COMPONENTS filesystem graph log)
 if(Boost_FOUND)
-	set(Boost_USE_STATIC_LIBS OFF)
+	set(Boost_USE_STATIC_LIBS ON)
 	set(Boost_USE_MULTITHREAD OFF)
 	include_directories(${Boost_INCLUDE_DIRS})
 	link_directories(${Boost_LIBRARY_DIRS})
@@ -40,8 +42,8 @@ add_definitions(-D_CONSOLE -D_SCL_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)
 file(GLOB_RECURSE LX_SHPMERGE_SRCS include/* src/*)
 add_executable(LxShapefilesMerge ${LX_SHPMERGE_SRCS})
 
-add_dependencies(LxShapefilesMerge LxGeoFactoryShared)
+#add_dependencies(LxShapefilesMerge LxGeoFactoryShared)
 
-target_link_libraries(LxShapefilesMerge ${GDAL_LIBRARIES} ${Boost_FILESYSTEM_LIBRARY} ${OpenCV_LIBS})
+target_link_libraries(LxShapefilesMerge ${GDAL_LIBRARIES} ${Boost_FILESYSTEM_LIBRARY} ${Boost_LOG_LIBRARY} ${OpenCV_LIBS})
 
 target_compile_options(LxShapefilesMerge PRIVATE ${OpenMP_CXX_FLAGS})
