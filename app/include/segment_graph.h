@@ -15,6 +15,7 @@ namespace LxGeo
 		class SegmentGraph
 		{
 		public:
+			SegmentGraph() = default;
 			SegmentGraph(std::vector<Inexact_Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
@@ -37,12 +38,14 @@ namespace LxGeo
 
 			void SegmentGraph::get_connected_vertices_indices(size_t vertex_idx, std::vector<size_t>& c_connected_vertices_indices);
 
-			void SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices);
+			size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices);
 
 			void SegmentGraph::delete_vertex_related(size_t vertex_idx);
 
+			void SegmentGraph::write_grouped_segments_shapefile( const std::string& output_filename);
+
 		public:
-			BoostSegmentGraph SG;
+			BoostSegmentGraph SG = BoostSegmentGraph(10);
 		private:
 			double e_distance_weight;
 			double e_angle_weight;
@@ -56,6 +59,7 @@ namespace LxGeo
 			Boost_RTree_2 _segments_tree;
 			size_t groupes_count;
 			std::vector<double> vertcies_centrality;
+		public:
 			std::vector<size_t> vertcies_groups;
 		};
 	}

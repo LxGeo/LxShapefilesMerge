@@ -22,7 +22,7 @@ namespace LxGeo
 				BOOST_LOG_TRIVIAL(info) << "Checking shapefiles validity!";
 				int validation_severity = S_NO_ERROR;
 				GDALDataset* dataset = NULL;
-				std::set<char*> srs_set;
+				std::set<int> srs_set;
 
 				try {
 					for (size_t i = 0; i < all_paths.size(); ++i) {
@@ -37,18 +37,23 @@ namespace LxGeo
 						{
 							OGRLayer* layer = dataset->GetLayer(0);
 							OGRSpatialReference* source_srs = layer->GetSpatialRef();
-							
-							char* pszWKT = NULL;
-							source_srs->exportToWkt(&pszWKT);
-							srs_set.insert(pszWKT);
-
-							if (srs_set.size() > 1)
-							{
-								BOOST_LOG_TRIVIAL(warning) << "One of the input shapefiles do not share the same SpatialRefSystem!";
-								validation_severity = (validation_severity > S_SPATIAL_REF_CONFLICT) ? validation_severity : S_SPATIAL_REF_CONFLICT;
-								BOOST_LOG_TRIVIAL(info) << "Applying srs transformation based on the first shapefile srs!";
-								if (params->fix_srs_difference) apply_srs_transform = true;
-							}
+							int utm_zone_number = source_srs->GetUTMZone();
+							srs_set.insert(utm_zone_number);
+														
+						}
+					}
+					if (srs_set.size() > 1)
+					{
+						BOOST_LOG_TRIVIAL(warning) << "One of the input shapefiles do not share the same SpatialRefSystem!";
+						validation_severity = (validation_severity > S_SPATIAL_REF_CONFLICT) ? validation_severity : S_SPATIAL_REF_CONFLICT;
+						
+						if (params->fix_srs_difference)
+						{
+							apply_srs_transform = true;
+							BOOST_LOG_TRIVIAL(info) << "Applying srs transformation based on the first shapefile srs!";
+						}
+						else {
+							BOOST_LOG_TRIVIAL(warning) << "Try setting --fix_srs_difference flag to apply srs tranformation!";
 						}
 					}
 				}
@@ -141,7 +146,7 @@ namespace LxGeo
 									std::vector<Inexact_Point_2> R;
 									int ring_size = ring->getNumPoints();
 									R.reserve(ring_size);
-									for (int u = 0; u < ring_size - 1; ++u) {
+									for (int u = 0; u < ring_size; ++u) {
 										OGRPoint pt;
 										ring->getPoint(u, &pt);
 										double x = pt.getX(), y = pt.getY();
@@ -150,7 +155,7 @@ namespace LxGeo
 									}
 
 									// Creating segments
-									for (int l = 0; l < ring_size-2; ++l) {
+									for (int l = 0; l < ring_size-1; ++l) {
 										Inexact_Point_2 p1 = R[l];
 										Inexact_Point_2 p2 = R[l+1];
 										// adding to segments
@@ -224,11 +229,15 @@ namespace LxGeo
 				clock_t t_begin_segments_tree = clock();
 				make_rtree(all_segments, segments_tree);
 				clock_t t_end_segments_tree = clock();
-				BOOST_LOG_TRIVIAL(debug) << "Elapsed time for segments tree creation: " << double(t_end_segments_tree - t_begin_segments_tree) / CLOCKS_PER_SEC << " s.";
+				BOOST_LOG_TRIVIAL(debug) << "Elapsed time for segments tree creation: " << float(t_end_segments_tree - t_begin_segments_tree) / CLOCKS_PER_SEC << " s.";
 				
 				SegmentGraph* SG = new SegmentGraph(all_segments,
 					segment_LID, segment_PID, segment_angle, segments_tree);
 
+				SG->fill_graph();
+				SG->cluster_segments();
+				BOOST_LOG_TRIVIAL(debug) << "Element 100 groupID:" << SG->vertcies_groups[100];
+				SG->write_grouped_segments_shapefile(params->output_shapefile);
 
 			}
 

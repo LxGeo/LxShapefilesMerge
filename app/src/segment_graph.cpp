@@ -4,13 +4,20 @@
 #include "defs_boost.h"
 #include "parameters.h"
 #include "segment_graph_wrapper.h"
+#include <boost/graph/graphviz.hpp>
 #include <assert.h>
 #include <limits>
+#include <gdal.h>
+#include <gdal_priv.h>
+#include <ogrsf_frmts.h>
+
 
 namespace LxGeo
 {
 	namespace LxShapefilesMerge
 	{
+
+		
 		SegmentGraph::SegmentGraph(std::vector<Inexact_Segment_2>& all_segments,
 			std::vector<short int>& segment_LID,
 			std::vector<short int>& segment_PID,
@@ -28,8 +35,8 @@ namespace LxGeo
 			
 			SG = BoostSegmentGraph(all_segments.size());
 			vertcies_centrality = std::vector<double>(all_segments.size());
-			vertcies_groups = std::vector<size_t>(all_segments.size(),-1);
-			groupes_count = 0;
+			vertcies_groups = std::vector<size_t>(all_segments.size(),0);
+			groupes_count = 1;
 		}
 
 
@@ -41,6 +48,7 @@ namespace LxGeo
 		{
 
 			vertcies_centrality = std::vector<double>(_all_segments.size());
+
 
 			for (size_t c_segment_index=0; c_segment_index <_all_segments.size(); ++c_segment_index)
 			{
@@ -67,13 +75,15 @@ namespace LxGeo
 					double neigh_weight = neighborhood_weights[neigh_iter_index];
 					double neigh_distance = neighborhood_distance[neigh_iter_index];
 					
-					auto e = boost::add_edge(c_segment_index, neigh_index, SG).first;
-					SG[e].distance = neigh_distance;
+
+					auto add_pair = boost::add_edge(vertex_descriptor(c_segment_index), vertex_descriptor(neigh_index), SG);
+					auto e = add_pair.first;
+					//SG[e].distance = neigh_distance;
 
 					// the weight can be assigned using a weight map.
-					boost::property_map<BoostSegmentGraph, boost::edge_weight_t>::type weightmap =
+					/*boost::property_map<BoostSegmentGraph, boost::edge_weight_t>::type weightmap =
 						get(boost::edge_weight, SG);
-					weightmap[e] = neigh_weight;
+					weightmap[e] = neigh_weight;*/
 					sum_vertex_centrality += neigh_weight;
 
 				}
@@ -136,11 +146,11 @@ namespace LxGeo
 					Boost_Point_2(possible_i_segment.target().x(), possible_i_segment.target().y())
 				);
 				//check distance
-				double diff_distance = bg::distance(c_boost_segment, possible_i_boost_segment);
+				double diff_distance = std::abs<double>(bg::distance(c_boost_segment, possible_i_boost_segment));
 				if (diff_distance < MAX_GROUPING_DISTANCE)
 				{
 					// check angle difference
-					double diff_angle = _segment_angle[possible_i_index] - _segment_angle[c_segment_index];
+					double diff_angle = std::abs<double>(_segment_angle[possible_i_index] - _segment_angle[c_segment_index]);
 					if (diff_angle < MAX_GROUPING_ANGLE_RAD)
 					{
 						//// ADD segment overlap ratios filter
@@ -170,10 +180,9 @@ namespace LxGeo
 				std::vector<size_t> c_connected_vertices_indices;
 				get_connected_vertices_indices(c_central_vertex_node, c_connected_vertices_indices);
 
-				size_t c_group_id = groupes_count;
-				
-				create_segment_group(c_group_id, c_connected_vertices_indices);
+				size_t newly_added_count = create_segment_group(groupes_count, c_connected_vertices_indices);
 
+				grouped_vertcies_count += newly_added_count;
 				groupes_count++;
 
 			}
@@ -193,21 +202,28 @@ namespace LxGeo
 
 			c_connected_vertices_indices.push_back( vertex_idx );
 			adjacency_iterator ai, ai_end;
-			for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_idx, SG); ai != ai_end; ++ai) {
+			for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_descriptor(vertex_idx), SG); ai != ai_end; ++ai) {
 				c_connected_vertices_indices.push_back(get(vertex_index_map, *ai));
 			}
 
 				
 		}
 
-		void SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices)
+		size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices)
 		{
+			size_t newly_added_count = 0;
 			for (auto segment_id = c_connected_vertices_indices.begin(); segment_id != c_connected_vertices_indices.end(); ++segment_id)
 			{
-				vertcies_groups[*segment_id] = c_group_id;
+				if (vertcies_groups[*segment_id] == 0)
+				{
+					vertcies_groups[*segment_id] = c_group_id;
+					newly_added_count++;
+				}
 
+				boost::clear_vertex(vertex_descriptor(*segment_id), SG);
 				delete_vertex_related(*segment_id);
 			}
+			return newly_added_count;
 		}
 
 		void SegmentGraph::delete_vertex_related(size_t vertex_idx)
@@ -216,9 +232,99 @@ namespace LxGeo
 			vertcies_centrality[vertex_idx] = DBL_MAX;
 
 			//remove vertex from graph
-			boost::remove_vertex(vertex_idx, SG);
+			//boost::remove_vertex(vertex_idx, SG);
 
+		}
 
+		void SegmentGraph::write_grouped_segments_shapefile(const std::string& output_filename)
+		{
+			if (_all_segments.empty()) {
+				std::cout << "Warning : empty list of segments. No output written." << std::endl;
+				return;
+			}
+
+			GDALDataset* source_dataset = NULL;
+			GDALDataset* target_dataset = NULL;
+
+			try {
+				const std::string driver_name = "ESRI Shapefile";
+
+				GDALDriver* driver = GetGDALDriverManager()->GetDriverByName(driver_name.c_str());
+				if (driver == NULL) {
+					throw std::logic_error("Error : ESRI Shapefile driver not available.");
+				}
+
+				// Step 1.
+				// Reopens source file to get features
+
+				source_dataset = (GDALDataset*)GDALOpenEx(params->paths[0].c_str(), GDAL_OF_VECTOR, NULL, NULL, NULL);
+				if (source_dataset == NULL) {
+					throw std::logic_error("Error : cannot reopen source shapefile.");
+				}
+
+				OGRLayer* source_layer = source_dataset->GetLayer(0);
+
+				// Step 2.
+				// Writes target file
+
+				target_dataset = driver->Create(output_filename.c_str(), 0, 0, 0, GDT_Unknown, NULL);
+				if (target_dataset == NULL) {
+					throw std::logic_error("Error : creation of output file failed.");
+				}
+
+				OGRLayer* target_layer = target_dataset->CreateLayer(source_layer->GetName(), source_layer->GetSpatialRef(), wkbLineString, NULL);
+				if (target_layer == NULL) {
+					throw std::logic_error("Error : layer creation failed.");
+				}
+
+				OGRFieldDefn o_field_id("ID", OFTInteger);
+
+				if (target_layer->CreateField(&o_field_id) != OGRERR_NONE) {
+					throw std::logic_error("Error : field creation failed.");
+				}
+
+				OGRFieldDefn o_field_c_group_id("c_group_id", OFTInteger);
+
+				if (target_layer->CreateField(&o_field_c_group_id) != OGRERR_NONE) {
+					throw std::logic_error("Error : field c_group_id creation failed.");
+				}
+
+				OGRFieldDefn o_field_angle("angle", OFTReal);
+
+				if (target_layer->CreateField(&o_field_angle) != OGRERR_NONE) {
+					throw std::logic_error("Error : field angle creation failed.");
+				}
+
+				for (size_t i = 0; i < _all_segments.size(); ++i) {
+					Inexact_Segment_2 S = _all_segments[i];
+					OGRLineString ogr_linestring;
+										
+					const Inexact_Point_2& S1 = S.source();
+					ogr_linestring.addPoint(&OGRPoint(S1.x(), S1.y()));
+					const Inexact_Point_2& S2 = S.target();
+					ogr_linestring.addPoint(&OGRPoint(S2.x(), S2.y()));
+					
+					OGRFeature* feature;
+					feature = OGRFeature::CreateFeature(target_layer->GetLayerDefn());
+
+					feature->SetGeometry(&ogr_linestring);
+					feature->SetField("ID", int(i));
+					feature->SetField("c_group_id", int(vertcies_groups[i]));
+					feature->SetField("angle", _segment_angle[i]);
+
+					// Writes new feature
+					OGRErr error = target_layer->CreateFeature(feature);
+					if (error != OGRERR_NONE) std::cout << "Error code : " << int(error) << std::endl;
+					OGRFeature::DestroyFeature(feature);
+				}
+
+			}
+			catch (std::exception& e) {
+				std::cout << e.what() << std::endl;
+			}
+
+			if (source_dataset != NULL) GDALClose(source_dataset);
+			if (target_dataset != NULL) GDALClose(target_dataset);
 		}
 
 	}

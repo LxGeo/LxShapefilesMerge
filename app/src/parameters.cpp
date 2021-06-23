@@ -59,7 +59,7 @@ namespace LxGeo
 				<< std::endl
 				<< "  [-i] [n] [path_1] [path_2] ... [path_n] -> provide paths of input shapefiles" << std::endl
 				<< "  [-o] [basename] -> specify basename of output file" << std::endl
-				<< " --fix_srs_difference to apply transformation of SpatialRefrenceSystem if any is different."
+				<< "  [--fix_srs_difference] to apply transformation of SpatialRefrenceSystem if any is different." << std::endl
 				<< "  [-mg_distance] [MAX_GROUPING_DISTANCE] -> specify maximum grouping distance for segments (meters). Default 3." << std::endl
 				<< "  [-mg_angle] [MAX_GROUPING_ANGLE_DEG] -> specify maximum grouping angle for segments (degrees). Default 5." << std::endl
 				<< std::endl

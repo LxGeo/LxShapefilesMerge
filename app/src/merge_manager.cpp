@@ -50,14 +50,14 @@ namespace LxGeo
 				all_segments,
 				segment_LID,
 				segment_PID,
-				segment_LID,
+				segment_ORDinP,
 				apply_srs_transform);
 
 			// Regularizing Segments
 			regularize_segments(all_segments,
 				segment_LID,
 				segment_PID,
-				segment_LID);
+				segment_ORDinP);
 
 
 		}
