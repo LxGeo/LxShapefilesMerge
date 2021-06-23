@@ -236,7 +236,7 @@ namespace LxGeo
 
 				SG->fill_graph();
 				SG->cluster_segments();
-				BOOST_LOG_TRIVIAL(debug) << "Element 100 groupID:" << SG->vertcies_groups[100];
+				SG->fuse_segments();
 				SG->write_grouped_segments_shapefile(params->output_shapefile);
 
 			}

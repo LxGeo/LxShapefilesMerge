@@ -5,11 +5,13 @@
 #include "parameters.h"
 #include "segment_graph_wrapper.h"
 #include <boost/graph/graphviz.hpp>
+#include <CGAL/linear_least_squares_fitting_2.h>
 #include <assert.h>
 #include <limits>
 #include <gdal.h>
 #include <gdal_priv.h>
 #include <ogrsf_frmts.h>
+#include <CGAL/exceptions.h>
 
 
 namespace LxGeo
@@ -211,11 +213,13 @@ namespace LxGeo
 
 		size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices)
 		{
+			groups_map[c_group_id] = std::vector<size_t>(c_connected_vertices_indices.size());
 			size_t newly_added_count = 0;
 			for (auto segment_id = c_connected_vertices_indices.begin(); segment_id != c_connected_vertices_indices.end(); ++segment_id)
 			{
 				if (vertcies_groups[*segment_id] == 0)
 				{
+					groups_map[c_group_id].push_back(*segment_id);
 					vertcies_groups[*segment_id] = c_group_id;
 					newly_added_count++;
 				}
@@ -223,6 +227,7 @@ namespace LxGeo
 				boost::clear_vertex(vertex_descriptor(*segment_id), SG);
 				delete_vertex_related(*segment_id);
 			}
+
 			return newly_added_count;
 		}
 
@@ -325,6 +330,79 @@ namespace LxGeo
 
 			if (source_dataset != NULL) GDALClose(source_dataset);
 			if (target_dataset != NULL) GDALClose(target_dataset);
+		}
+
+		void SegmentGraph::fuse_segments()
+		{
+			for (size_t c_groupe_idx = 1; c_groupe_idx <= groupes_count; ++c_groupe_idx)
+			{
+				try {
+				std::vector<Inexact_Segment_2*> respective_segments;
+				get_respective_segment(c_groupe_idx, respective_segments);
+
+				
+					Inexact_Line_2 fitted_line;
+					get_best_fitting_line(fitted_line, respective_segments);
+
+					for (size_t resp_idx = 0; resp_idx < respective_segments.size(); ++resp_idx) {
+
+						Inexact_Segment_2 c_segment = *(respective_segments[resp_idx]);
+						size_t idx_in_all_segs = groups_map[c_groupe_idx][resp_idx];
+						Inexact_Point_2 source_projected = fitted_line.projection(c_segment.source());
+						Inexact_Point_2 target_projected = fitted_line.projection(c_segment.target());
+						// not sure about line below // maybe new Inexact_Segment_2 //fix func args
+
+						_all_segments[idx_in_all_segs] = Inexact_Segment_2(source_projected, target_projected);
+					}
+				}
+				catch (...) {
+					BOOST_LOG_TRIVIAL(debug) << "cgal error";
+				}
+
+
+			}
+		}
+
+		void SegmentGraph::get_respective_segment(size_t groupe_idx, std::vector<Inexact_Segment_2*>& respective_segments)
+		{
+			std::vector<size_t> respective_segments_indices = groups_map[groupe_idx];
+			for (size_t idx = 0; idx < respective_segments_indices.size(); ++idx)
+			{
+				respective_segments.push_back(&(_all_segments[respective_segments_indices[idx]]));
+			}
+		}
+
+		void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments)
+		{
+			// init 1 weighted vector
+			std::vector<size_t> segments_weights(respective_segments.size(), 1);
+			if (respective_segments.size() == 1)
+			{
+				fitted_line = Inexact_Line_2(respective_segments[0]->source(), respective_segments[0]->source());
+			}
+			else
+			{ 
+				get_best_fitting_line(fitted_line, respective_segments, segments_weights);
+			}
+
+		}
+		void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights)
+		{
+			std::list<Inexact_Segment_2> all_segments;
+			//test only
+			assert(respective_segments.size() == segments_weights.size());
+			// fill all_points with repetition (based on weights)
+			for (size_t c_idx = 0; c_idx < respective_segments.size(); ++c_idx)
+			{
+				size_t c_segment_weight = segments_weights[c_idx];
+				for (size_t rep = 0; rep < c_segment_weight; ++rep) {
+					all_segments.push_back(*respective_segments[c_idx]);
+					all_segments.push_back(*respective_segments[c_idx]);
+				}
+			}
+			// use cgal fit_line
+			CGAL::linear_least_squares_fitting_2(all_segments.begin(), all_segments.end(), fitted_line, CGAL::Dimension_tag<1>());
+
 		}
 
 	}

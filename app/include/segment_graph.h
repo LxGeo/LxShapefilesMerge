@@ -44,6 +44,14 @@ namespace LxGeo
 
 			void SegmentGraph::write_grouped_segments_shapefile( const std::string& output_filename);
 
+			void SegmentGraph::fuse_segments();
+
+			void SegmentGraph::get_respective_segment(size_t groupe_idx, std::vector<Inexact_Segment_2*>& respective_segments);
+
+			void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments);
+			
+			void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
+
 		public:
 			BoostSegmentGraph SG = BoostSegmentGraph(10);
 		private:
@@ -59,6 +67,7 @@ namespace LxGeo
 			Boost_RTree_2 _segments_tree;
 			size_t groupes_count;
 			std::vector<double> vertcies_centrality;
+			std::map<size_t, std::vector<size_t>> groups_map;
 		public:
 			std::vector<size_t> vertcies_groups;
 		};
