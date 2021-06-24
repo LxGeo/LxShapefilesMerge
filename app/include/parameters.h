@@ -30,6 +30,7 @@ namespace LxGeo
 
 			std::string output_basename;
 			std::string output_shapefile;
+			std::string temp_dir;
 
 			bool fix_srs_difference;
 			double MAX_GROUPING_DISTANCE;

@@ -5,6 +5,8 @@
 #include "parameters.h"
 #include "segment_graph_wrapper.h"
 #include <boost/graph/graphviz.hpp>
+#include <boost/filesystem.hpp>
+#include <fmt/core.h>
 #include <CGAL/linear_least_squares_fitting_2.h>
 #include <assert.h>
 #include <limits>
@@ -23,8 +25,9 @@ namespace LxGeo
 		SegmentGraph::SegmentGraph(std::vector<Inexact_Segment_2>& all_segments,
 			std::vector<short int>& segment_LID,
 			std::vector<short int>& segment_PID,
+			std::vector<short int>& segment_ORDinP,
 			std::vector<double>& segment_angle,
-			Boost_RTree_2& segments_tree): _all_segments(all_segments), _segment_LID(segment_LID), _segment_PID(segment_PID), _segment_angle(segment_angle),
+			Boost_RTree_2& segments_tree): _all_segments(all_segments), _segment_LID(segment_LID), _segment_PID(segment_PID), _segment_ORDinP(segment_ORDinP), _segment_angle(segment_angle),
 			_segments_tree(segments_tree)
 		{
 			// load weights and thresh from parameters
@@ -353,7 +356,7 @@ namespace LxGeo
 						Inexact_Point_2 target_projected = fitted_line.projection(c_segment.target());
 						// not sure about line below // maybe new Inexact_Segment_2 //fix func args
 
-						_all_segments[idx_in_all_segs] = *(new Inexact_Segment_2(source_projected, target_projected));
+						_all_segments[idx_in_all_segs] = Inexact_Segment_2(source_projected, target_projected);
 					}
 				}
 				catch (std::exception& e) {
@@ -405,5 +408,134 @@ namespace LxGeo
 
 		}
 
+		void SegmentGraph::reconstruct_polygons(const std::string& temp_dir)
+		{
+
+
+			GDALDataset* source_dataset = NULL;
+			std::map<size_t, GDALDataset*> outlayers_datasets_map;
+
+			try {
+
+				const std::string driver_name = "ESRI Shapefile";
+
+				GDALDriver* driver = GetGDALDriverManager()->GetDriverByName(driver_name.c_str());
+				if (driver == NULL) {
+					throw std::logic_error("Error : ESRI Shapefile driver not available.");
+				}
+
+				// Gets a first spatial reference
+				source_dataset = (GDALDataset*)GDALOpenEx(params->paths[0].c_str(), GDAL_OF_VECTOR, NULL, NULL, NULL);
+				if (source_dataset == NULL) {
+					throw std::ios_base::failure("Error : unable to load shapefile.");
+				}
+				OGRLayer* source_layer = source_dataset->GetLayer(0);
+				OGRSpatialReference* target_ref = source_layer->GetSpatialRef();
+
+				//Create output layers datasets			
+
+				for (size_t layer_id = 0; layer_id < params->paths.size(); ++layer_id) {
+
+					// file_path constructions
+					boost::filesystem::path c_out_basename(fmt::format("l_{}.shp", layer_id));
+					boost::filesystem::path outdir(params->temp_dir);
+					boost::filesystem::path c_full_path = outdir / c_out_basename;
+
+					outlayers_datasets_map[layer_id] = driver->Create(c_full_path.string().c_str(), 0, 0, 0, GDT_Unknown, NULL);
+					if (outlayers_datasets_map[layer_id] == NULL) {
+						throw std::ios_base::failure(fmt::format("Error : unable to write temporary shapefile at {}", c_full_path.string()));
+					}
+
+					OGRLayer* target_layer = outlayers_datasets_map[layer_id]->CreateLayer(source_layer->GetName(), target_ref, wkbPolygon, NULL);
+					if (target_layer == NULL) {
+						throw std::logic_error("Error : layer creation failed.");
+					}
+
+					OGRFieldDefn o_field_id("ID", OFTInteger);
+
+					if (target_layer->CreateField(&o_field_id) != OGRERR_NONE) {
+						throw std::logic_error("Error : field creation failed.");
+					}
+
+					OGRLayer* current_dataset_layer= outlayers_datasets_map[0]->GetLayer(0);
+					OGRFeature* feature;
+					std::list<OGRLinearRing> ex_int_rings;
+					OGRLinearRing current_ring;
+					short int last_s_ORDinP=-1;
+					short int last_s_PID=-1;
+					short int last_s_LID=0;
+
+					for (size_t current_segment_index = 0; current_segment_index < (_all_segments.size() - 1); ++current_segment_index) {
+
+						/*c_s_ORDinP = _segment_ORDinP[current_segment_index];
+						c_s_PID = _segment_PID[current_segment_index];
+						c_s_LID = _segment_LID[current_segment_index];*/
+
+						if(_segment_ORDinP[current_segment_index] ==0)//changement of ring
+						{
+							if (!current_ring.IsEmpty()) {
+								//closing ring by adding first element again
+								/*OGRPoint first_point;
+								current_ring.getPoint(0, &first_point);
+								current_ring.addPoint(&OGRPoint(first_point));*/
+								current_ring.closeRings();
+								//add it to list of current polygon rings
+								ex_int_rings.push_back(OGRLinearRing(current_ring));
+								current_ring.empty();
+							}
+
+
+							if (_segment_LID[current_segment_index] != last_s_LID) {
+								current_dataset_layer = outlayers_datasets_map[_segment_LID[current_segment_index]]->GetLayer(0);
+							}
+
+							if (_segment_PID[current_segment_index] != last_s_PID) {
+
+								OGRPolygon current_polygon;
+
+								for (OGRLinearRing ring : ex_int_rings)
+								{
+									OGRLinearRing copy_ring(ring);
+									current_polygon.addRing(&copy_ring);
+								}
+								//write polygon to respective dataset
+								feature = OGRFeature::CreateFeature(current_dataset_layer->GetLayerDefn());
+								feature->SetGeometry(&current_polygon);
+								feature->SetField("ID", _segment_PID[current_segment_index]);
+								// saving feature
+								OGRErr error = current_dataset_layer->CreateFeature(feature);
+								if (error != OGRERR_NONE) BOOST_LOG_TRIVIAL(warning)<< fmt::format("Error code : {}", error);
+								OGRFeature::DestroyFeature(feature);
+								// clearing old rings
+								ex_int_rings.clear();
+							}
+
+						}
+
+						// adding point to rings (in all cases)
+						Inexact_Point_2 s1_target = _all_segments[current_segment_index].target();
+						Inexact_Segment_2 next_segment_in_polygon;
+						// below is to assure next segment is in the same polygon
+						if (_segment_ORDinP[current_segment_index + 1] != 0) next_segment_in_polygon = _all_segments[current_segment_index + 1];
+						else next_segment_in_polygon = _all_segments[current_segment_index - _segment_ORDinP[current_segment_index]];
+
+						Inexact_Point_2 projected_point = next_segment_in_polygon.supporting_line().projection(s1_target);
+						current_ring.addPoint(&OGRPoint(projected_point.x(), projected_point.y()));
+					}
+
+				}
+
+			}
+			catch (std::exception& e) {
+				BOOST_LOG_TRIVIAL(debug) << e.what();
+				BOOST_LOG_TRIVIAL(fatal) << "Fatal error! For a quick resolution keep a copy of input data!";
+
+			}
+
+			if (source_dataset != NULL) GDALClose(source_dataset);
+			for (auto out_dataset = outlayers_datasets_map.begin(); out_dataset != outlayers_datasets_map.end(); ++out_dataset) {
+				if (out_dataset->second != NULL) GDALClose(out_dataset->second);
+			}
+		}
 	}
 }

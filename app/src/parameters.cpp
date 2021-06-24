@@ -34,6 +34,7 @@ namespace LxGeo
 
 			output_basename = "result";
 			output_shapefile = "result.shp";
+			temp_dir = "temp_dir";
 
 
 			MAX_GROUPING_DISTANCE = 3;

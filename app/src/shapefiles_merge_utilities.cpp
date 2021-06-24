@@ -238,13 +238,13 @@ namespace LxGeo
 				BOOST_LOG_TRIVIAL(debug) << "Elapsed time for segments tree creation: " << float(t_end_segments_tree - t_begin_segments_tree) / CLOCKS_PER_SEC << " s.";
 				
 				SegmentGraph* SG = new SegmentGraph(all_segments,
-					segment_LID, segment_PID, segment_angle, segments_tree);
+					segment_LID, segment_PID, segment_ORDinP, segment_angle, segments_tree);
 
 				SG->fill_graph();
 				SG->cluster_segments();
 				SG->fuse_segments();
-				SG->write_grouped_segments_shapefile(params->output_shapefile);
-
+				//SG->write_grouped_segments_shapefile(params->output_shapefile);
+				SG->reconstruct_polygons(params->temp_dir);
 			}
 
 		}

@@ -19,6 +19,7 @@ namespace LxGeo
 			SegmentGraph(std::vector<Inexact_Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
+				std::vector<short int>& segment_ORDinP,
 				std::vector<double>& segment_angle,
 				Boost_RTree_2& segments_tree);
 
@@ -52,6 +53,8 @@ namespace LxGeo
 			
 			void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
 
+			void SegmentGraph::reconstruct_polygons(const std::string& temp_dir);
+
 		public:
 			BoostSegmentGraph SG = BoostSegmentGraph(10);
 		private:
@@ -63,6 +66,7 @@ namespace LxGeo
 			std::vector<Inexact_Segment_2> _all_segments;
 			std::vector<short int>& _segment_LID;
 			std::vector<short int>& _segment_PID;
+			std::vector<short int>& _segment_ORDinP;
 			std::vector<double> _segment_angle;
 			Boost_RTree_2 _segments_tree;
 			size_t groupes_count;
