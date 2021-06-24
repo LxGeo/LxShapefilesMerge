@@ -213,7 +213,8 @@ namespace LxGeo
 
 		size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices)
 		{
-			groups_map[c_group_id] = std::vector<size_t>(c_connected_vertices_indices.size());
+			groups_map[c_group_id] = std::vector<size_t>();
+			groups_map[c_group_id].reserve(c_connected_vertices_indices.size());
 			size_t newly_added_count = 0;
 			for (auto segment_id = c_connected_vertices_indices.begin(); segment_id != c_connected_vertices_indices.end(); ++segment_id)
 			{
@@ -227,6 +228,7 @@ namespace LxGeo
 				boost::clear_vertex(vertex_descriptor(*segment_id), SG);
 				delete_vertex_related(*segment_id);
 			}
+			groups_map[c_group_id].shrink_to_fit();
 
 			return newly_added_count;
 		}
@@ -337,9 +339,8 @@ namespace LxGeo
 			for (size_t c_groupe_idx = 1; c_groupe_idx <= groupes_count; ++c_groupe_idx)
 			{
 				try {
-				std::vector<Inexact_Segment_2*> respective_segments;
-				get_respective_segment(c_groupe_idx, respective_segments);
-
+					std::vector<Inexact_Segment_2*> respective_segments;
+					get_respective_segment(c_groupe_idx, respective_segments);
 				
 					Inexact_Line_2 fitted_line;
 					get_best_fitting_line(fitted_line, respective_segments);
@@ -352,10 +353,10 @@ namespace LxGeo
 						Inexact_Point_2 target_projected = fitted_line.projection(c_segment.target());
 						// not sure about line below // maybe new Inexact_Segment_2 //fix func args
 
-						_all_segments[idx_in_all_segs] = Inexact_Segment_2(source_projected, target_projected);
+						_all_segments[idx_in_all_segs] = *(new Inexact_Segment_2(source_projected, target_projected));
 					}
 				}
-				catch (...) {
+				catch (std::exception& e) {
 					BOOST_LOG_TRIVIAL(debug) << "cgal error";
 				}
 
@@ -395,8 +396,7 @@ namespace LxGeo
 			for (size_t c_idx = 0; c_idx < respective_segments.size(); ++c_idx)
 			{
 				size_t c_segment_weight = segments_weights[c_idx];
-				for (size_t rep = 0; rep < c_segment_weight; ++rep) {
-					all_segments.push_back(*respective_segments[c_idx]);
+				for (size_t rep = 0; rep < c_segment_weight; ++rep) {					
 					all_segments.push_back(*respective_segments[c_idx]);
 				}
 			}

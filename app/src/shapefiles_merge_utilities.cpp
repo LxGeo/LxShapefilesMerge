@@ -155,15 +155,21 @@ namespace LxGeo
 									}
 
 									// Creating segments
+									size_t ignored_segments_count = 0; //ignored for length == 0
 									for (int l = 0; l < ring_size-1; ++l) {
 										Inexact_Point_2 p1 = R[l];
 										Inexact_Point_2 p2 = R[l+1];
+										if ((p1 - p2).squared_length() == 0)
+										{
+											ignored_segments_count++;
+											continue;
+										}
 										// adding to segments
 										all_segments.push_back(Inexact_Segment_2(p1, p2));
 										segment_LID.push_back(i);
 										segment_PID.push_back(j);
 										// if two segments share the same ORDinP & PID than at least an outer ring exists.
-										segment_ORDinP.push_back(l);
+										segment_ORDinP.push_back(l- ignored_segments_count);
 									}
 
 								}
