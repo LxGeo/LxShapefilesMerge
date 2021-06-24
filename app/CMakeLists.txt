@@ -4,6 +4,7 @@ project(LxShapefilesMerge)
 set(EXECUTABLE_OUTPUT_PATH ../bin/${CMAKE_BUILD_TYPE})
 
 
+find_package(fmt CONFIG REQUIRED)
 
 find_package(Boost REQUIRED COMPONENTS filesystem graph log)
 if(Boost_FOUND)
@@ -44,6 +45,7 @@ add_executable(LxShapefilesMerge ${LX_SHPMERGE_SRCS})
 
 #add_dependencies(LxShapefilesMerge LxGeoFactoryShared)
 
-target_link_libraries(LxShapefilesMerge ${GDAL_LIBRARIES} ${Boost_FILESYSTEM_LIBRARY} ${Boost_LOG_LIBRARY} ${OpenCV_LIBS})
+target_link_libraries(LxShapefilesMerge ${GDAL_LIBRARIES} ${Boost_FILESYSTEM_LIBRARY} ${Boost_LOG_LIBRARY} ${OpenCV_LIBS} fmt::fmt fmt::fmt-header-only)
+
 
 target_compile_options(LxShapefilesMerge PRIVATE ${OpenMP_CXX_FLAGS})

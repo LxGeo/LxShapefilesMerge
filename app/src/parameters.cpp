@@ -1,5 +1,6 @@
 #include "parameters.h"
-
+#include <boost/filesystem.hpp>
+#include <fmt/core.h>
 
 namespace LxGeo
 {
@@ -9,6 +10,13 @@ namespace LxGeo
 		{
 			init();
 			parse(argc, argv);
+			//output dirs creation
+			boost::filesystem::path output_path(output_shapefile);
+			boost::filesystem::path output_parent_dirname = output_path.parent_path();
+			boost::filesystem::path output_temp_path = output_parent_dirname / temp_dir;
+			temp_dir = output_temp_path.string();
+			if (boost::filesystem::create_directory(output_parent_dirname))	BOOST_LOG_TRIVIAL(info) << fmt::format("Directory Created: {}", output_parent_dirname.string());
+			if (boost::filesystem::create_directory(output_temp_path))	BOOST_LOG_TRIVIAL(info) << fmt::format("Directory Created: {}", output_temp_path.string());
 		}
 
 

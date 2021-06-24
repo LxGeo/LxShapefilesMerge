@@ -346,7 +346,14 @@ namespace LxGeo
 					get_respective_segment(c_groupe_idx, respective_segments);
 				
 					Inexact_Line_2 fitted_line;
-					get_best_fitting_line(fitted_line, respective_segments);
+					//get_best_fitting_line(fitted_line, respective_segments);
+					double longest_value = 0;
+					for (auto segment_i : respective_segments) {
+						if (segment_i->squared_length() > longest_value) {
+							fitted_line = segment_i->supporting_line();
+							longest_value = segment_i->squared_length();
+						}
+					}
 
 					for (size_t resp_idx = 0; resp_idx < respective_segments.size(); ++resp_idx) {
 
@@ -456,13 +463,14 @@ namespace LxGeo
 					if (target_layer->CreateField(&o_field_id) != OGRERR_NONE) {
 						throw std::logic_error("Error : field creation failed.");
 					}
+				}
 
 					OGRLayer* current_dataset_layer= outlayers_datasets_map[0]->GetLayer(0);
 					OGRFeature* feature;
 					std::list<OGRLinearRing> ex_int_rings;
 					OGRLinearRing current_ring;
 					short int last_s_ORDinP=-1;
-					short int last_s_PID=-1;
+					short int last_s_PID=0;
 					short int last_s_LID=0;
 
 					for (size_t current_segment_index = 0; current_segment_index < (_all_segments.size() - 1); ++current_segment_index) {
@@ -487,6 +495,7 @@ namespace LxGeo
 
 							if (_segment_LID[current_segment_index] != last_s_LID) {
 								current_dataset_layer = outlayers_datasets_map[_segment_LID[current_segment_index]]->GetLayer(0);
+								last_s_LID = _segment_LID[current_segment_index];
 							}
 
 							if (_segment_PID[current_segment_index] != last_s_PID) {
@@ -508,6 +517,7 @@ namespace LxGeo
 								OGRFeature::DestroyFeature(feature);
 								// clearing old rings
 								ex_int_rings.clear();
+								last_s_PID = _segment_PID[current_segment_index];
 							}
 
 						}
@@ -523,7 +533,7 @@ namespace LxGeo
 						current_ring.addPoint(&OGRPoint(projected_point.x(), projected_point.y()));
 					}
 
-				}
+				
 
 			}
 			catch (std::exception& e) {

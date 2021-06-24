@@ -240,10 +240,11 @@ namespace LxGeo
 				SegmentGraph* SG = new SegmentGraph(all_segments,
 					segment_LID, segment_PID, segment_ORDinP, segment_angle, segments_tree);
 
+				//SG->write_grouped_segments_shapefile(params->output_shapefile);
 				SG->fill_graph();
 				SG->cluster_segments();
 				SG->fuse_segments();
-				//SG->write_grouped_segments_shapefile(params->output_shapefile);
+				SG->write_grouped_segments_shapefile(params->output_shapefile);
 				SG->reconstruct_polygons(params->temp_dir);
 			}
 
