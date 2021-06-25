@@ -7,6 +7,8 @@
 #include <gdal_priv.h>
 #include <ogrsf_frmts.h>
 #include "segment_graph.h"
+#include <boost/filesystem.hpp>
+#include <fmt/core.h>
 
 namespace LxGeo
 {
@@ -56,12 +58,30 @@ namespace LxGeo
 							BOOST_LOG_TRIVIAL(warning) << "Try setting --fix_srs_difference flag to apply srs tranformation!";
 						}
 					}
+
+					//output dirs creation
+					boost::filesystem::path output_path(params->output_shapefile);
+					boost::filesystem::path output_parent_dirname = output_path.parent_path();
+					boost::filesystem::path output_temp_path = output_parent_dirname / params->temp_dir;
+					params->temp_dir = output_temp_path.string();
+					if (boost::filesystem::exists(output_parent_dirname) || boost::filesystem::create_directory(output_parent_dirname))
+					{
+						BOOST_LOG_TRIVIAL(info) << fmt::format("Directory Created: {}", output_parent_dirname.string());
+					}
+					else validation_severity = S_DIRECTORY_CREATION_ERROR;
+					if (boost::filesystem::exists(output_temp_path) ||  boost::filesystem::create_directory(output_temp_path))
+					{
+						BOOST_LOG_TRIVIAL(info) << fmt::format("Directory Created: {}", output_temp_path.string());
+					}
+					else validation_severity = S_DIRECTORY_CREATION_ERROR;
+
 				}
 				catch (std::exception& e) {
 					BOOST_LOG_TRIVIAL(debug) << e.what();
 					BOOST_LOG_TRIVIAL(fatal) << "Fatal error! For a quick resolution keep a copy of input data!";
 					validation_severity = S_UNKNOWN_ERROR;
 				}
+
 
 				return validation_severity;
 
@@ -155,21 +175,44 @@ namespace LxGeo
 									}
 
 									// Creating segments
-									size_t ignored_segments_count = 0; //ignored for length == 0
-									for (int l = 0; l < ring_size-1; ++l) {
+									size_t added_segments = 0;
+									for (int l = 0; l < ring_size-2; ) {
 										Inexact_Point_2 p1 = R[l];
 										Inexact_Point_2 p2 = R[l+1];
-										if ((p1 - p2).squared_length() == 0)
-										{
-											ignored_segments_count++;
-											continue;
+										Inexact_Point_2 p3 = R[l + 2];
+
+										std::vector<Inexact_Segment_2> segments_to_add(2);
+										//calc_angle
+										double numerator = p2.y() * (p1.x() - p3.x()) + p1.y() * (p3.x() - p2.x()) + p3.y() * (p2.x() - p1.x());
+										double denominator = (p2.x() - p1.x()) * (p1.x() - p3.x()) + (p2.y() - p1.y()) * (p1.y() - p3.y());
+										double ratio = numerator / denominator;
+										double points_angle = std::abs(std::fmod(std::atan(ratio), M_PI));
+										bool pts_collinear = (points_angle < ( M_PI / 180)); //CGAL::collinear(p1, p2, p3);
+										if (pts_collinear) {
+											segments_to_add.push_back(Inexact_Segment_2(p1, p3));
+											l += 2;
 										}
-										// adding to segments
-										all_segments.push_back(Inexact_Segment_2(p1, p2));
-										segment_LID.push_back(i);
-										segment_PID.push_back(j);
-										// if two segments share the same ORDinP & PID than at least an outer ring exists.
-										segment_ORDinP.push_back(l- ignored_segments_count);
+										else {
+											segments_to_add.push_back(Inexact_Segment_2(p1, p2));
+											l += 1;
+											if (l== ring_size-2) segments_to_add.push_back(Inexact_Segment_2(p2, p3));
+										}
+
+										for (const auto& segment_to_add : segments_to_add) {
+											if (segment_to_add.squared_length() == 0)
+											{
+												BOOST_LOG_TRIVIAL(debug) << "Ignoring segment for 0 length!";
+												continue;
+											}
+											// adding to segments
+											all_segments.push_back(segment_to_add);
+											segment_LID.push_back(i);
+											segment_PID.push_back(j);
+											// if two segments share the same ORDinP & PID than at least an outer ring exists.
+											segment_ORDinP.push_back(added_segments);
+											added_segments++;
+										}
+										
 									}
 
 								}
@@ -180,6 +223,11 @@ namespace LxGeo
 						// Step 3.
 						// Reading is over, closes the dataset
 						if (i != 0) GDALClose(dataset);
+
+						all_segments.shrink_to_fit();
+						segment_LID.shrink_to_fit();
+						segment_PID.shrink_to_fit();
+						segment_ORDinP.shrink_to_fit();
 					}
 
 				}

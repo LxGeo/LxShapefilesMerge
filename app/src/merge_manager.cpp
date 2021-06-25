@@ -34,6 +34,11 @@ namespace LxGeo
 			int validation_severity = pre_check();
 			if (validation_severity >= S_WRONG_SHAPEFILE_PATH) return;
 			else if ((validation_severity == S_SPATIAL_REF_CONFLICT) && !params->fix_srs_difference) return;
+			else if (validation_severity == S_DIRECTORY_CREATION_ERROR)
+			{
+				BOOST_LOG_TRIVIAL(fatal) << "Cannot start merging steps! Ensure access to output directory and temporary directory!";
+				return;
+			}
 			else BOOST_LOG_TRIVIAL(info) << "Pre check passed succefully!";
 
 			// Loading polygons as segments (to run regularization)

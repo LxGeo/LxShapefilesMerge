@@ -1,6 +1,4 @@
 #include "parameters.h"
-#include <boost/filesystem.hpp>
-#include <fmt/core.h>
 
 namespace LxGeo
 {
@@ -10,13 +8,7 @@ namespace LxGeo
 		{
 			init();
 			parse(argc, argv);
-			//output dirs creation
-			boost::filesystem::path output_path(output_shapefile);
-			boost::filesystem::path output_parent_dirname = output_path.parent_path();
-			boost::filesystem::path output_temp_path = output_parent_dirname / temp_dir;
-			temp_dir = output_temp_path.string();
-			if (boost::filesystem::create_directory(output_parent_dirname))	BOOST_LOG_TRIVIAL(info) << fmt::format("Directory Created: {}", output_parent_dirname.string());
-			if (boost::filesystem::create_directory(output_temp_path))	BOOST_LOG_TRIVIAL(info) << fmt::format("Directory Created: {}", output_temp_path.string());
+			
 		}
 
 
@@ -45,8 +37,8 @@ namespace LxGeo
 			temp_dir = "temp_dir";
 
 
-			MAX_GROUPING_DISTANCE = 3;
-			MAX_GROUPING_ANGLE_DEG = 5;
+			MAX_GROUPING_DISTANCE = 2;
+			MAX_GROUPING_ANGLE_DEG = 3;
 			e_distance_weight=0.5;
 			e_angle_weight=0.5;
 			fix_srs_difference = os_print = os_draw = os_check = false;
@@ -69,8 +61,8 @@ namespace LxGeo
 				<< "  [-i] [n] [path_1] [path_2] ... [path_n] -> provide paths of input shapefiles" << std::endl
 				<< "  [-o] [basename] -> specify basename of output file" << std::endl
 				<< "  [--fix_srs_difference] to apply transformation of SpatialRefrenceSystem if any is different." << std::endl
-				<< "  [-mg_distance] [MAX_GROUPING_DISTANCE] -> specify maximum grouping distance for segments (meters). Default 3." << std::endl
-				<< "  [-mg_angle] [MAX_GROUPING_ANGLE_DEG] -> specify maximum grouping angle for segments (degrees). Default 5." << std::endl
+				<< "  [-mg_distance] [MAX_GROUPING_DISTANCE] -> specify maximum grouping distance for segments (meters). Default 2." << std::endl
+				<< "  [-mg_angle] [MAX_GROUPING_ANGLE_DEG] -> specify maximum grouping angle for segments (degrees). Default 3." << std::endl
 				<< std::endl
 				<< "Version compiled on : " << __DATE__ << std::endl;
 
