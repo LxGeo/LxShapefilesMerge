@@ -1,6 +1,9 @@
 #pragma once
 #include "defs.h"
+#include <boost/filesystem.hpp>
 #include "defs_cgal.h"
+#include <gdal.h>
+#include <gdal_priv.h>
 
 namespace LxGeo
 {
@@ -30,6 +33,14 @@ namespace LxGeo
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP);
+
+			void overlay_union_layers(std::vector<boost::filesystem::path> &regularized_layers_path);
+
+			double segments_overlap_ratios(const Inexact_Segment_2& segment1, const Inexact_Segment_2& segment2);
+
+			void clean_invalid(OGRLayer* c_layer);
+
+			void simplify_ring(std::vector<Inexact_Point_2>& R, std::vector<Inexact_Point_2>& simplified_R);
 
 			
 			//void read_shapefiles(const std::vector<std::string>& all_paths, std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons);
