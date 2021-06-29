@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-
+#include <boost/filesystem.hpp>
 
 
 namespace LxGeo
@@ -35,6 +35,7 @@ namespace LxGeo
 			bool fix_srs_difference;
 			double MAX_GROUPING_DISTANCE;
 			double MAX_GROUPING_ANGLE_DEG;
+			double MIN_SEG_OVERLAP_RATIO;
 			double e_distance_weight;
 			double e_angle_weight;
 
@@ -43,6 +44,8 @@ namespace LxGeo
 			bool os_check;
 			double os_lambda_v;
 			double os_lambda_c;
+			std::vector<boost::filesystem::path> regularized_layers_path;
+
 		};
 
 		extern Parameters* params;

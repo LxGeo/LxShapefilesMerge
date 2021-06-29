@@ -3,6 +3,8 @@
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 #include <CGAL/Polygon_2.h>
 
+#include <CGAL/Cartesian_converter.h>
+
 namespace LxGeo
 {
 	namespace GeometryFactoryShared
@@ -28,6 +30,10 @@ namespace LxGeo
 		typedef CGAL::Polygon_2<IK> Inexact_Polygon_2;
 
 		typedef CGAL::Bbox_2 Bbox_2;
+
+		typedef CGAL::Cartesian_converter<IK, EK> IK_to_EK;
+		typedef CGAL::Cartesian_converter<EK, IK> EK_to_IK;
+
 		
 		/*
 		typedef CGAL::Simple_cartesian<int>::Point_2 Integer_Point;

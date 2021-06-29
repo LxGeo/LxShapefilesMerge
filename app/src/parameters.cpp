@@ -38,7 +38,8 @@ namespace LxGeo
 
 
 			MAX_GROUPING_DISTANCE = 2;
-			MAX_GROUPING_ANGLE_DEG = 3;
+			MAX_GROUPING_ANGLE_DEG = 5;
+			MIN_SEG_OVERLAP_RATIO = 0.1;
 			e_distance_weight=0.5;
 			e_angle_weight=0.5;
 			fix_srs_difference = os_print = os_draw = os_check = false;
@@ -62,7 +63,7 @@ namespace LxGeo
 				<< "  [-o] [basename] -> specify basename of output file" << std::endl
 				<< "  [--fix_srs_difference] to apply transformation of SpatialRefrenceSystem if any is different." << std::endl
 				<< "  [-mg_distance] [MAX_GROUPING_DISTANCE] -> specify maximum grouping distance for segments (meters). Default 2." << std::endl
-				<< "  [-mg_angle] [MAX_GROUPING_ANGLE_DEG] -> specify maximum grouping angle for segments (degrees). Default 3." << std::endl
+				<< "  [-mg_angle] [MAX_GROUPING_ANGLE_DEG] -> specify maximum grouping angle for segments (degrees). Default 5." << std::endl
 				<< std::endl
 				<< "Version compiled on : " << __DATE__ << std::endl;
 

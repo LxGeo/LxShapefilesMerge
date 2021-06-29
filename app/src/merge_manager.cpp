@@ -64,6 +64,7 @@ namespace LxGeo
 				segment_PID,
 				segment_ORDinP);
 
+			overlay_union_layers(params->regularized_layers_path);
 
 		}
 	}

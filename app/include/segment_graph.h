@@ -3,6 +3,7 @@
 #include "defs_cgal.h"
 #include "defs_boost.h"
 #include "segment_graph_wrapper.h"
+#include <ogrsf_frmts.h>
 
 namespace LxGeo
 {
@@ -52,6 +53,12 @@ namespace LxGeo
 			void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments);
 			
 			void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
+
+			void SegmentGraph::get_best_fitting_line_by_direction(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments);
+
+			void SegmentGraph::get_best_fitting_line_by_direction(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
+
+			void SegmentGraph::add_polygon_to_layer(std::list<OGRLinearRing>& ex_int_rings, OGRLayer* current_dataset_layer, size_t current_segment_index);
 
 			void SegmentGraph::reconstruct_polygons(const std::string& temp_dir);
 

@@ -1,3 +1,4 @@
+yasm-tool:x86-windows
 boost
 cgal
 opencv

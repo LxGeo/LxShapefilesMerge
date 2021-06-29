@@ -4,7 +4,7 @@
 #include "defs_boost.h"
 #include "parameters.h"
 #include "segment_graph_wrapper.h"
-#include <boost/graph/graphviz.hpp>
+#include "shapefiles_merge_utilities.h"
 #include <boost/filesystem.hpp>
 #include <fmt/core.h>
 #include <CGAL/linear_least_squares_fitting_2.h>
@@ -62,11 +62,13 @@ namespace LxGeo
 				std::vector<double> neighborhood_weights;
 				std::vector<double> neighborhood_distance;
 
+				
 				get_neighborhood_segments_indices_weights(c_segment_index,
 					neighborhood_indices,
 					neighborhood_weights,
 					neighborhood_distance
 				);
+				
 
 				//test only
 				assert (neighborhood_indices.size() == neighborhood_weights.size());
@@ -150,16 +152,19 @@ namespace LxGeo
 					Boost_Point_2(possible_i_segment.source().x(), possible_i_segment.source().y()),
 					Boost_Point_2(possible_i_segment.target().x(), possible_i_segment.target().y())
 				);
+
 				//check distance
 				double diff_distance = std::abs<double>(bg::distance(c_boost_segment, possible_i_boost_segment));
 				if (diff_distance < MAX_GROUPING_DISTANCE)
 				{
 					// check angle difference
-					double diff_angle = std::abs<double>(_segment_angle[possible_i_index] - _segment_angle[c_segment_index]);
+					double diff_angle = std::abs<double>(std::fmod(_segment_angle[possible_i_index] - _segment_angle[c_segment_index], M_PI));
+					diff_angle = std::min<double>(diff_angle, std::abs<double>(diff_angle - M_PI));
 					if (diff_angle < MAX_GROUPING_ANGLE_RAD)
 					{
-						//// ADD segment overlap ratios filter
-
+						//segment overlap ratios filter
+						//if (shapefiles_merge_utils::segments_overlap_ratios(c_segment, possible_i_segment) < params->MIN_SEG_OVERLAP_RATIO) continue;
+												
 						neighborhood_indices.push_back(possible_i_index);
 						neighborhood_distance.push_back(diff_distance);
 						double edge_pre_weight = ((diff_distance / MAX_GROUPING_DISTANCE) + (diff_angle / MAX_GROUPING_ANGLE_RAD)) / 2;
@@ -183,6 +188,7 @@ namespace LxGeo
 				
 				size_t c_central_vertex_node = get_min_centrality_vertex_index();
 				std::vector<size_t> c_connected_vertices_indices;
+				
 				get_connected_vertices_indices(c_central_vertex_node, c_connected_vertices_indices);
 
 				size_t newly_added_count = create_segment_group(groupes_count, c_connected_vertices_indices);
@@ -228,7 +234,6 @@ namespace LxGeo
 					newly_added_count++;
 				}
 
-				boost::clear_vertex(vertex_descriptor(*segment_id), SG);
 				delete_vertex_related(*segment_id);
 			}
 			groups_map[c_group_id].shrink_to_fit();
@@ -242,7 +247,7 @@ namespace LxGeo
 			vertcies_centrality[vertex_idx] = DBL_MAX;
 
 			//remove vertex from graph
-			//boost::remove_vertex(vertex_idx, SG);
+			boost::clear_vertex(vertex_descriptor(vertex_idx), SG);
 
 		}
 
@@ -293,6 +298,24 @@ namespace LxGeo
 					throw std::logic_error("Error : field creation failed.");
 				}
 
+				OGRFieldDefn o_field_lid("LID", OFTInteger);
+
+				if (target_layer->CreateField(&o_field_lid) != OGRERR_NONE) {
+					throw std::logic_error("Error : field creation failed.");
+				}
+
+				OGRFieldDefn o_field_pid("PID", OFTInteger);
+
+				if (target_layer->CreateField(&o_field_pid) != OGRERR_NONE) {
+					throw std::logic_error("Error : field creation failed.");
+				}
+
+				OGRFieldDefn o_field_ordinp("ORDinP", OFTInteger);
+
+				if (target_layer->CreateField(&o_field_ordinp) != OGRERR_NONE) {
+					throw std::logic_error("Error : field creation failed.");
+				}
+
 				OGRFieldDefn o_field_c_group_id("c_group_id", OFTInteger);
 
 				if (target_layer->CreateField(&o_field_c_group_id) != OGRERR_NONE) {
@@ -319,6 +342,9 @@ namespace LxGeo
 
 					feature->SetGeometry(&ogr_linestring);
 					feature->SetField("ID", int(i));
+					feature->SetField("LID", _segment_LID[i]);
+					feature->SetField("PID", _segment_PID[i]);
+					feature->SetField("ORDinP", _segment_ORDinP[i]);
 					feature->SetField("c_group_id", int(vertcies_groups[i]));
 					feature->SetField("angle", _segment_angle[i]);
 
@@ -339,34 +365,70 @@ namespace LxGeo
 
 		void SegmentGraph::fuse_segments()
 		{
+			IK_to_EK to_exact;
+			EK_to_IK to_inexact;
+			const double PREC = 1.0 / (1 << 30) / (1 << 10);
+
 			for (size_t c_groupe_idx = 1; c_groupe_idx <= groupes_count; ++c_groupe_idx)
 			{
 				try {
 					std::vector<Inexact_Segment_2*> respective_segments;
 					get_respective_segment(c_groupe_idx, respective_segments);
+					if (respective_segments.size() <= 1) continue;
 				
 					Inexact_Line_2 fitted_line;
-					//get_best_fitting_line(fitted_line, respective_segments);
-					double longest_value = 0;
-					for (auto segment_i : respective_segments) {
-						if (segment_i->squared_length() > longest_value) {
-							fitted_line = segment_i->supporting_line();
-							longest_value = segment_i->squared_length();
+					get_best_fitting_line_by_direction(fitted_line, respective_segments);
+					if (fitted_line.is_degenerate()) {
+						double longest_value = 0;
+						for (auto segment_i : respective_segments) {
+							if (segment_i->squared_length() > longest_value) {
+								fitted_line = segment_i->supporting_line();
+								longest_value = segment_i->squared_length();
+							}
 						}
 					}
+
+					//Line_2 exact_fitted_line = to_exact(fitted_line);
 
 					for (size_t resp_idx = 0; resp_idx < respective_segments.size(); ++resp_idx) {
 
 						Inexact_Segment_2 c_segment = *(respective_segments[resp_idx]);
+						//// creating exact points
+						//FT x, y;
+						//std::stringstream  stream_s;
+						//stream_s << c_segment.source().x() << " " << c_segment.source().y();
+						//stream_s >> x >> y;
+						//Point_2 exact_c_segment_source(x, y);
+						//std::stringstream  stream_t;
+						//stream_t << c_segment.target().x() << " " << c_segment.target().y();
+						//stream_t >> x >> y;
+						//Point_2 exact_c_segment_target(x, y);
+						//
+						//Segment_2 exact_c_segment = to_exact(c_segment);
+						//
+
 						size_t idx_in_all_segs = groups_map[c_groupe_idx][resp_idx];
+
 						Inexact_Point_2 source_projected = fitted_line.projection(c_segment.source());
 						Inexact_Point_2 target_projected = fitted_line.projection(c_segment.target());
-						// not sure about line below // maybe new Inexact_Segment_2 //fix func args
+						if (fitted_line.is_vertical()) {
+							source_projected = Inexact_Point_2(fitted_line.x_at_y(source_projected.y()), source_projected.y());
+							target_projected = Inexact_Point_2(fitted_line.x_at_y(target_projected.y()), target_projected.y());
+						}
+						else {
+							source_projected = Inexact_Point_2(source_projected.x(), fitted_line.y_at_x(source_projected.x()));
+							target_projected = Inexact_Point_2(target_projected.x(), fitted_line.y_at_x(target_projected.x()));
+						}
 
+						//FT::set_relative_precision_of_to_double(PREC);
+						//Inexact_Point_2 source_projected(CGAL::to_double(exact_source_projected.x()), CGAL::to_double(exact_source_projected.y()));  //to_inexact(exact_source_projected); //
+						//Inexact_Point_2 target_projected(CGAL::to_double(exact_target_projected.x()), CGAL::to_double(exact_target_projected.y())); //to_inexact(exact_target_projected); //
 						_all_segments[idx_in_all_segs] = Inexact_Segment_2(source_projected, target_projected);
 					}
+
 				}
 				catch (std::exception& e) {
+					BOOST_LOG_TRIVIAL(debug) << e.what();
 					BOOST_LOG_TRIVIAL(debug) << "cgal error";
 				}
 
@@ -389,7 +451,7 @@ namespace LxGeo
 			std::vector<size_t> segments_weights(respective_segments.size(), 1);
 			if (respective_segments.size() == 1)
 			{
-				fitted_line = Inexact_Line_2(respective_segments[0]->source(), respective_segments[0]->source());
+				fitted_line = respective_segments[0]->supporting_line();
 			}
 			else
 			{ 
@@ -411,8 +473,78 @@ namespace LxGeo
 				}
 			}
 			// use cgal fit_line
-			CGAL::linear_least_squares_fitting_2(all_segments.begin(), all_segments.end(), fitted_line, CGAL::Dimension_tag<1>());
+			CGAL::linear_least_squares_fitting_2(all_segments.begin(), all_segments.end(), fitted_line, CGAL::Dimension_tag<0>());
 
+		}
+
+		void SegmentGraph::get_best_fitting_line_by_direction(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments) {
+			std::vector<size_t> segments_weights(respective_segments.size(), 1);
+			if (respective_segments.size() == 1)
+			{
+				fitted_line = respective_segments[0]->supporting_line();
+			}
+			else
+			{
+				get_best_fitting_line_by_direction(fitted_line, respective_segments, segments_weights);
+			}
+		}
+		void SegmentGraph::get_best_fitting_line_by_direction(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights) {
+
+			// common vector creation
+			Inexact_Vector_2 common_vector = segments_weights[0] * respective_segments[0]->to_vector();
+			// get weighted vector in the same direction
+			for (size_t c_seg_index = 1; c_seg_index < respective_segments.size(); ++c_seg_index) {
+				Inexact_Segment_2* c_segment = respective_segments[c_seg_index];
+				size_t c_weight = segments_weights[c_seg_index];
+				Inexact_Vector_2 c_vector = c_segment->to_vector();
+				c_vector = (common_vector*c_vector)>0 ? c_vector : -c_vector;
+				common_vector += c_vector * c_weight;
+			}
+
+			// get passage point on common normal
+			Inexact_Line_2 normal_line_of_projection(Inexact_Point_2(0, 0), common_vector.perpendicular(CGAL::Sign::POSITIVE));
+			double sum_x=0, sum_y=0, sum_weight=0;
+			for (size_t c_seg_index = 0; c_seg_index < respective_segments.size(); ++c_seg_index) {
+				Inexact_Segment_2* c_segment = respective_segments[c_seg_index];
+				double c_segment_sq_length = c_segment->squared_length();
+				size_t c_weight = segments_weights[c_seg_index];
+				Inexact_Point_2 seg_source_projected = normal_line_of_projection.projection(c_segment->source());
+				sum_x += c_segment_sq_length * c_weight * seg_source_projected.x();
+				sum_y += c_segment_sq_length * c_weight * seg_source_projected.y();
+				sum_weight += c_segment_sq_length* c_weight;
+			}
+
+			fitted_line = Inexact_Line_2(Inexact_Point_2(sum_x/sum_weight, sum_y/sum_weight), common_vector);
+
+		}
+
+		void SegmentGraph::add_polygon_to_layer(std::list<OGRLinearRing> & ex_int_rings, OGRLayer* current_dataset_layer, size_t current_segment_index) {
+
+			OGRFeature* feature; 
+			OGRPolygon current_polygon;
+			
+			for (OGRLinearRing ring : ex_int_rings)
+			{
+				// simplify rings
+				std::vector<Inexact_Point_2> initial_ring_vector, simplified_ring_vector;
+				initial_ring_vector.reserve(ring.getNumPoints());
+				simplified_ring_vector.reserve(ring.getNumPoints());
+				for (const OGRPoint& ring_point : ring) initial_ring_vector.push_back(Inexact_Point_2(ring_point.getX(), ring_point.getY()));
+				shapefiles_merge_utils::simplify_ring(initial_ring_vector, simplified_ring_vector);
+				OGRLinearRing copy_ring;
+				for (const Inexact_Point_2& c_point : simplified_ring_vector) copy_ring.addPoint(&OGRPoint(c_point.x(), c_point.y()));
+				if (copy_ring.getNumPoints() > 2)	current_polygon.addRing(&copy_ring);
+			}
+			if (current_polygon.getExteriorRing()) {
+				//write polygon to respective dataset
+				feature = OGRFeature::CreateFeature(current_dataset_layer->GetLayerDefn());
+				feature->SetGeometry(&current_polygon);
+				feature->SetField("ID", _segment_PID[current_segment_index]);
+				// saving feature
+				OGRErr error = current_dataset_layer->CreateFeature(feature);
+				if (error != OGRERR_NONE) BOOST_LOG_TRIVIAL(warning) << fmt::format("Error code : {}", error);
+				OGRFeature::DestroyFeature(feature);
+			}
 		}
 
 		void SegmentGraph::reconstruct_polygons(const std::string& temp_dir)
@@ -447,6 +579,7 @@ namespace LxGeo
 					boost::filesystem::path c_out_basename(fmt::format("l_{}.shp", layer_id));
 					boost::filesystem::path outdir(params->temp_dir);
 					boost::filesystem::path c_full_path = outdir / c_out_basename;
+					params->regularized_layers_path.push_back(c_full_path);
 
 					outlayers_datasets_map[layer_id] = driver->Create(c_full_path.string().c_str(), 0, 0, 0, GDT_Unknown, NULL);
 					if (outlayers_datasets_map[layer_id] == NULL) {
@@ -466,7 +599,6 @@ namespace LxGeo
 				}
 
 					OGRLayer* current_dataset_layer= outlayers_datasets_map[0]->GetLayer(0);
-					OGRFeature* feature;
 					std::list<OGRLinearRing> ex_int_rings;
 					OGRLinearRing current_ring;
 					short int last_s_ORDinP=-1;
@@ -475,17 +607,10 @@ namespace LxGeo
 
 					for (size_t current_segment_index = 0; current_segment_index < (_all_segments.size() - 1); ++current_segment_index) {
 
-						/*c_s_ORDinP = _segment_ORDinP[current_segment_index];
-						c_s_PID = _segment_PID[current_segment_index];
-						c_s_LID = _segment_LID[current_segment_index];*/
 
 						if(_segment_ORDinP[current_segment_index] ==0)//changement of ring
 						{
 							if (!current_ring.IsEmpty()) {
-								//closing ring by adding first element again
-								/*OGRPoint first_point;
-								current_ring.getPoint(0, &first_point);
-								current_ring.addPoint(&OGRPoint(first_point));*/
 								current_ring.closeRings();
 								//add it to list of current polygon rings
 								ex_int_rings.push_back(OGRLinearRing(current_ring));
@@ -493,33 +618,21 @@ namespace LxGeo
 							}
 
 
+							if (_segment_LID[current_segment_index] == 0 && _segment_PID[current_segment_index] == 157)
+								BOOST_LOG_TRIVIAL(debug) << "check this";
+
+							if (_segment_PID[current_segment_index] != last_s_PID) {
+																
+								add_polygon_to_layer(ex_int_rings, current_dataset_layer, current_segment_index);
+								last_s_PID = _segment_PID[current_segment_index];
+								// clearing old rings
+								ex_int_rings.clear();
+							}
+
 							if (_segment_LID[current_segment_index] != last_s_LID) {
 								current_dataset_layer = outlayers_datasets_map[_segment_LID[current_segment_index]]->GetLayer(0);
 								last_s_LID = _segment_LID[current_segment_index];
 							}
-
-							if (_segment_PID[current_segment_index] != last_s_PID) {
-
-								OGRPolygon current_polygon;
-
-								for (OGRLinearRing ring : ex_int_rings)
-								{
-									OGRLinearRing copy_ring(ring);
-									current_polygon.addRing(&copy_ring);
-								}
-								//write polygon to respective dataset
-								feature = OGRFeature::CreateFeature(current_dataset_layer->GetLayerDefn());
-								feature->SetGeometry(&current_polygon);
-								feature->SetField("ID", _segment_PID[current_segment_index]);
-								// saving feature
-								OGRErr error = current_dataset_layer->CreateFeature(feature);
-								if (error != OGRERR_NONE) BOOST_LOG_TRIVIAL(warning)<< fmt::format("Error code : {}", error);
-								OGRFeature::DestroyFeature(feature);
-								// clearing old rings
-								ex_int_rings.clear();
-								last_s_PID = _segment_PID[current_segment_index];
-							}
-
 						}
 
 						// adding point to rings (in all cases)
@@ -529,11 +642,23 @@ namespace LxGeo
 						if (_segment_ORDinP[current_segment_index + 1] != 0) next_segment_in_polygon = _all_segments[current_segment_index + 1];
 						else next_segment_in_polygon = _all_segments[current_segment_index - _segment_ORDinP[current_segment_index]];
 
-						Inexact_Point_2 projected_point = next_segment_in_polygon.supporting_line().projection(s1_target);
-						current_ring.addPoint(&OGRPoint(projected_point.x(), projected_point.y()));
+						//Inexact_Point_2 projected_point = next_segment_in_polygon.supporting_line().projection(s1_target);
+						//current_ring.addPoint(&OGRPoint(projected_point.x(), projected_point.y()));
+
+						auto result = CGAL::intersection(_all_segments[current_segment_index].supporting_line(), next_segment_in_polygon.supporting_line());
+						Inexact_Point_2 intersection_point;
+						assign(intersection_point, result);
+						current_ring.addPoint(&OGRPoint(intersection_point.x(), intersection_point.y()));
 					}
 
-				
+					//add last polygon
+					Inexact_Segment_2 next_segment_in_polygon = _all_segments[_all_segments.size()-1 - _segment_ORDinP[_all_segments.size()-1]];
+					auto result = CGAL::intersection(_all_segments[_all_segments.size()-1].supporting_line(), next_segment_in_polygon.supporting_line());
+					Inexact_Point_2 intersection_point;
+					assign(intersection_point, result);
+					current_ring.addPoint(&OGRPoint(intersection_point.x(), intersection_point.y()));
+					ex_int_rings.push_back(OGRLinearRing(current_ring));
+					add_polygon_to_layer(ex_int_rings, outlayers_datasets_map[_segment_LID[_all_segments.size()-1]]->GetLayer(0), _all_segments.size()-1);
 
 			}
 			catch (std::exception& e) {
@@ -541,7 +666,10 @@ namespace LxGeo
 				BOOST_LOG_TRIVIAL(fatal) << "Fatal error! For a quick resolution keep a copy of input data!";
 
 			}
-
+			for (auto out_dataset = outlayers_datasets_map.begin(); out_dataset != outlayers_datasets_map.end(); ++out_dataset) {
+				shapefiles_merge_utils::clean_invalid(out_dataset->second->GetLayer(0));
+				out_dataset->second->GetLayer(0)->SyncToDisk();
+			}
 			if (source_dataset != NULL) GDALClose(source_dataset);
 			for (auto out_dataset = outlayers_datasets_map.begin(); out_dataset != outlayers_datasets_map.end(); ++out_dataset) {
 				if (out_dataset->second != NULL) GDALClose(out_dataset->second);
