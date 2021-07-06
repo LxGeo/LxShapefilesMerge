@@ -34,6 +34,8 @@ namespace LxGeo
 				std::vector<double>& neighborhood_distance
 			);
 
+			void SegmentGraph::fix_n2_consecutive_segments();
+
 			void SegmentGraph::cluster_segments();
 
 			size_t SegmentGraph::get_min_centrality_vertex_index();

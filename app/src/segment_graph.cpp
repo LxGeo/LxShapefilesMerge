@@ -21,6 +21,8 @@ namespace LxGeo
 	namespace LxShapefilesMerge
 	{
 
+		IK_to_EK to_exact;
+		EK_to_IK to_inexact;
 		
 		SegmentGraph::SegmentGraph(std::vector<Inexact_Segment_2>& all_segments,
 			std::vector<short int>& segment_LID,
@@ -109,6 +111,33 @@ namespace LxGeo
 				vertcies_centrality[c_segment_index]= normalized_centrality_value;
 			}
 
+			fix_n2_consecutive_segments();
+		}
+
+		void SegmentGraph::fix_n2_consecutive_segments() {
+
+
+			boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
+				boost::get(boost::vertex_index, SG);
+
+			for (size_t c_segment_index = 0; c_segment_index < _all_segments.size(); ++c_segment_index) {
+
+				size_t c_ring_segment_count = 0;
+				bool same_ring;
+				if (_segment_LID[c_segment_index] == 2 && _segment_PID[c_segment_index] == 220 && _segment_ORDinP[c_segment_index] == 2)
+					BOOST_LOG_TRIVIAL(debug) << "check this"; 
+
+				adjacency_iterator ai, ai_end;
+				for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_descriptor(c_segment_index), SG); ai != ai_end; ++ai) {
+					//get(vertex_index_map, *ai)
+					if (_segment_LID[c_segment_index] == _segment_LID[*ai] &&
+						_segment_PID[c_segment_index] == _segment_PID[*ai] &&
+						shapefiles_merge_utils::segments_overlap_ratios(_all_segments[c_segment_index], _all_segments[*ai]) > 0.9) {
+						boost::remove_edge(vertex_descriptor(c_segment_index), vertex_descriptor(*ai), SG);
+					}
+				}
+			}
+
 		}
 
 		void SegmentGraph::get_neighborhood_segments_indices_weights(size_t c_segment_index,
@@ -143,6 +172,8 @@ namespace LxGeo
 
 			_segments_tree.query(bgi::intersects(query), std::back_inserter(possible_neighbors));
 
+			std::vector<Boost_Value_2> filtered_possible_neighbors;
+
 			for (int i = 0; i < possible_neighbors.size(); i++) {
 
 				size_t possible_i_index = possible_neighbors[i].second;
@@ -164,7 +195,7 @@ namespace LxGeo
 					{
 						//segment overlap ratios filter
 						//if (shapefiles_merge_utils::segments_overlap_ratios(c_segment, possible_i_segment) < params->MIN_SEG_OVERLAP_RATIO) continue;
-												
+						
 						neighborhood_indices.push_back(possible_i_index);
 						neighborhood_distance.push_back(diff_distance);
 						double edge_pre_weight = ((diff_distance / MAX_GROUPING_DISTANCE) + (diff_angle / MAX_GROUPING_ANGLE_RAD)) / 2;
@@ -208,13 +239,13 @@ namespace LxGeo
 
 		void SegmentGraph::get_connected_vertices_indices(size_t vertex_idx, std::vector<size_t>& c_connected_vertices_indices) {
 
-			boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
-				boost::get(boost::vertex_index, SG);
+			//boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
+				//boost::get(boost::vertex_index, SG);
 
 			c_connected_vertices_indices.push_back( vertex_idx );
 			adjacency_iterator ai, ai_end;
 			for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_descriptor(vertex_idx), SG); ai != ai_end; ++ai) {
-				c_connected_vertices_indices.push_back(get(vertex_index_map, *ai));
+				c_connected_vertices_indices.push_back(*ai);
 			}
 
 				
@@ -547,6 +578,34 @@ namespace LxGeo
 			}
 		}
 
+		void get_consecutive_segments_connection_point(const Inexact_Segment_2& seg1, const Inexact_Segment_2& seg2, std::vector<Inexact_Point_2>& connection_points) {
+			
+			//if (CGAL::do_intersect(seg1, seg2)) {
+			if (true){
+				Inexact_Point_2 connection_point;
+				Point_2 exact_connection_point;
+				auto result = CGAL::intersection(to_exact(seg1.supporting_line()), to_exact(seg2.supporting_line()));
+				if (result) {
+
+					if (assign(exact_connection_point, result)) {
+						//intersection is a point
+						connection_points.push_back(to_inexact(exact_connection_point));
+					}
+					else {
+						// intersection is a line
+						connection_points.push_back(seg2.source());
+					}
+				}
+				else
+				{
+					//no intersection
+					connection_points.push_back(seg1.target());
+					connection_points.push_back(seg2.source());
+				}
+			}
+			
+		}
+
 		void SegmentGraph::reconstruct_polygons(const std::string& temp_dir)
 		{
 
@@ -607,6 +666,8 @@ namespace LxGeo
 
 					for (size_t current_segment_index = 0; current_segment_index < (_all_segments.size() - 1); ++current_segment_index) {
 
+						if (_segment_LID[current_segment_index] == 2 && _segment_PID[current_segment_index] == 293 && _segment_ORDinP[current_segment_index] == 0)
+							BOOST_LOG_TRIVIAL(debug) << "check this";
 
 						if(_segment_ORDinP[current_segment_index] ==0)//changement of ring
 						{
@@ -615,11 +676,7 @@ namespace LxGeo
 								//add it to list of current polygon rings
 								ex_int_rings.push_back(OGRLinearRing(current_ring));
 								current_ring.empty();
-							}
-
-
-							if (_segment_LID[current_segment_index] == 0 && _segment_PID[current_segment_index] == 157)
-								BOOST_LOG_TRIVIAL(debug) << "check this";
+							}							
 
 							if (_segment_PID[current_segment_index] != last_s_PID) {
 																
@@ -645,18 +702,32 @@ namespace LxGeo
 						//Inexact_Point_2 projected_point = next_segment_in_polygon.supporting_line().projection(s1_target);
 						//current_ring.addPoint(&OGRPoint(projected_point.x(), projected_point.y()));
 
-						auto result = CGAL::intersection(_all_segments[current_segment_index].supporting_line(), next_segment_in_polygon.supporting_line());
-						Inexact_Point_2 intersection_point;
-						assign(intersection_point, result);
-						current_ring.addPoint(&OGRPoint(intersection_point.x(), intersection_point.y()));
+						std::vector<Inexact_Point_2> connection_points;
+						connection_points.reserve(2);
+						std::cout.precision(17);
+						get_consecutive_segments_connection_point(_all_segments[current_segment_index], next_segment_in_polygon, connection_points);
+						std::cout << "s1: Linestring(" << _all_segments[current_segment_index].source() << ", " << _all_segments[current_segment_index].target() << ")" << std::endl;
+						std::cout << "s1: Linestring(" << next_segment_in_polygon.source() << ", " << next_segment_in_polygon.target() << ")" << std::endl;
+						std::cout << "intersection: POINT( " << connection_points[0] << ")" << std::endl;
+						
+						
+						auto result = CGAL::intersection(
+							Segment_2(Point_2(367636.21114201029, 5623997.8431751812),
+								Point_2(367638.79948433518, 5623998.1697859755)).supporting_line(),
+							Segment_2(Point_2(367638.79948433518, 5623998.1697859755),
+								Point_2(367639.14885215426, 5623998.2138710646)).supporting_line());
+						Point_2 connection_point;
+						assign(connection_point, result);
+						EK_to_IK to_inexact;
+						std::cout << "intersection: " << to_inexact(connection_point);
+						for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(connection_point.x(), connection_point.y()));
 					}
 
 					//add last polygon
 					Inexact_Segment_2 next_segment_in_polygon = _all_segments[_all_segments.size()-1 - _segment_ORDinP[_all_segments.size()-1]];
-					auto result = CGAL::intersection(_all_segments[_all_segments.size()-1].supporting_line(), next_segment_in_polygon.supporting_line());
-					Inexact_Point_2 intersection_point;
-					assign(intersection_point, result);
-					current_ring.addPoint(&OGRPoint(intersection_point.x(), intersection_point.y()));
+					std::vector<Inexact_Point_2> connection_points;
+					get_consecutive_segments_connection_point(_all_segments[_all_segments.size() - 1], next_segment_in_polygon, connection_points);
+					for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(connection_point.x(), connection_point.y()));
 					ex_int_rings.push_back(OGRLinearRing(current_ring));
 					add_polygon_to_layer(ex_int_rings, outlayers_datasets_map[_segment_LID[_all_segments.size()-1]]->GetLayer(0), _all_segments.size()-1);
 
@@ -667,8 +738,8 @@ namespace LxGeo
 
 			}
 			for (auto out_dataset = outlayers_datasets_map.begin(); out_dataset != outlayers_datasets_map.end(); ++out_dataset) {
-				shapefiles_merge_utils::clean_invalid(out_dataset->second->GetLayer(0));
-				out_dataset->second->GetLayer(0)->SyncToDisk();
+				//shapefiles_merge_utils::clean_invalid(out_dataset->second->GetLayer(0));
+				//out_dataset->second->GetLayer(0)->SyncToDisk();
 			}
 			if (source_dataset != NULL) GDALClose(source_dataset);
 			for (auto out_dataset = outlayers_datasets_map.begin(); out_dataset != outlayers_datasets_map.end(); ++out_dataset) {

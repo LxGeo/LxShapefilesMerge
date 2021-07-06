@@ -357,7 +357,7 @@ namespace LxGeo
 				Inexact_Point_2 turn_m2 = R[R.size() - 2];
 				Inexact_Point_2 turn_m1 = R[R.size() - 1];
 				for (size_t c_point_idx = 0; c_point_idx < R.size(); ++c_point_idx) {
-					if (!pts_collinear(R[c_point_idx], turn_m2, turn_m1)) {
+					if (!pts_collinear(turn_m1, R[c_point_idx], turn_m2)) {
 						simplified_R.push_back(turn_m1);
 					}
 					turn_m2 = turn_m1;
