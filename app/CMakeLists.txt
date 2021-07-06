@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 project(LxShapefilesMerge)
 
-set(EXECUTABLE_OUTPUT_PATH ../bin/${CMAKE_BUILD_TYPE})
+#set(EXECUTABLE_OUTPUT_PATH ../bin/${CMAKE_BUILD_TYPE})
 
 
 find_package(fmt CONFIG REQUIRED)
