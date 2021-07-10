@@ -98,6 +98,19 @@ namespace LxGeo
 				return pts_collinear;
 			}
 
+			bool pts_collinear_2(Inexact_Point_2 p1, Inexact_Point_2 p2, Inexact_Point_2 p3) {
+				Inexact_Vector_2 s_vector_1(p2,p1);
+				Inexact_Vector_2 s_vector_2(p2,p3);
+				s_vector_1 = s_vector_1 / sqrt(s_vector_1.squared_length());
+				s_vector_2 = s_vector_2 / sqrt(s_vector_2.squared_length());
+				if (s_vector_1.squared_length() == 0 || s_vector_2.squared_length() == 0) return true;
+				double cross_product = s_vector_1 * s_vector_2;
+				double diff_angle = acos(cross_product);
+				double angle_mod = asin(sqrt(sin(diff_angle) * sin(diff_angle)));
+				bool pts_collinear = (angle_mod < (M_PI / 180));
+				return pts_collinear;
+			}
+
 			double segments_overlap_ratios(const Inexact_Segment_2& segment1, const Inexact_Segment_2& segment2)
 			{
 
@@ -222,12 +235,19 @@ namespace LxGeo
 									std::vector<Inexact_Point_2> simplified_R;
 									simplify_ring(R, simplified_R);
 
+									size_t c_ignored_segments_count = 0;
 									for (size_t l = 0; l < simplified_R.size()-1; ++l) {
-										all_segments.push_back(Inexact_Segment_2(simplified_R[l], simplified_R[l+1]));
+										Inexact_Segment_2 segment_to_add(simplified_R[l], simplified_R[l + 1]);
+										if (segment_to_add.squared_length() == 0) {
+											BOOST_LOG_TRIVIAL(info) << "Ignoring segment having 0 length!";
+											c_ignored_segments_count++;
+											continue;
+										}
+										all_segments.push_back(segment_to_add);
 										segment_LID.push_back(i);
 										segment_PID.push_back(j);
 										// if two segments share the same ORDinP & PID than at least an outer ring exists.
-										segment_ORDinP.push_back(l);
+										segment_ORDinP.push_back(l- c_ignored_segments_count);
 									}
 
 								}
@@ -357,7 +377,7 @@ namespace LxGeo
 				Inexact_Point_2 turn_m2 = R[R.size() - 2];
 				Inexact_Point_2 turn_m1 = R[R.size() - 1];
 				for (size_t c_point_idx = 0; c_point_idx < R.size(); ++c_point_idx) {
-					if (!pts_collinear(turn_m1, R[c_point_idx], turn_m2)) {
+					if (!pts_collinear_2(R[c_point_idx], turn_m1, turn_m2)) {
 						simplified_R.push_back(turn_m1);
 					}
 					turn_m2 = turn_m1;
