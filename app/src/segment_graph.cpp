@@ -111,7 +111,7 @@ namespace LxGeo
 				vertcies_centrality[c_segment_index]= normalized_centrality_value;
 			}
 
-			fix_n2_consecutive_segments();
+			//fix_n2_consecutive_segments();
 		}
 
 		void SegmentGraph::fix_n2_consecutive_segments() {
@@ -124,8 +124,6 @@ namespace LxGeo
 
 				size_t c_ring_segment_count = 0;
 				bool same_ring;
-				if (_segment_LID[c_segment_index] == 2 && _segment_PID[c_segment_index] == 220 && _segment_ORDinP[c_segment_index] == 2)
-					BOOST_LOG_TRIVIAL(debug) << "check this"; 
 
 				adjacency_iterator ai, ai_end;
 				for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_descriptor(c_segment_index), SG); ai != ai_end; ++ai) {
@@ -580,11 +578,27 @@ namespace LxGeo
 
 		void get_consecutive_segments_connection_point(const Inexact_Segment_2& seg1, const Inexact_Segment_2& seg2, std::vector<Inexact_Point_2>& connection_points) {
 			
-			//if (CGAL::do_intersect(seg1, seg2)) {
-			if (true){
+
+			// if almost parralel connect endings
+			Line_2 s_line1 = to_exact(seg1.supporting_line());
+			Line_2 s_line2 = to_exact(seg2.supporting_line());
+			/*Vector_2 s_vector_1 = s_line1.to_vector();
+			Vector_2 s_vector_2 = s_line2.to_vector();
+			s_vector_1 = s_vector_1/CGAL::sqrt(s_vector_1.squared_length());
+			s_vector_2 = s_vector_2/CGAL::sqrt(s_vector_2.squared_length());
+			FT E_cross_product = s_vector_1 * s_vector_2;*/
+			Inexact_Vector_2 s_vector_1 = seg1.to_vector();
+			s_vector_1 = s_vector_1 / sqrt(s_vector_1.squared_length());
+			Inexact_Vector_2 s_vector_2 = seg2.to_vector();
+			s_vector_2 = s_vector_2 / sqrt(s_vector_2.squared_length());
+			double cross_product = s_vector_1 * s_vector_2;//CGAL::to_double(E_cross_product);
+			double diff_angle = acos(cross_product);
+			double angle_mod = asin(sqrt(sin(diff_angle) * sin(diff_angle)));
+
+			if (angle_mod>(10*M_PI/180)){
 				Inexact_Point_2 connection_point;
 				Point_2 exact_connection_point;
-				auto result = CGAL::intersection(to_exact(seg1.supporting_line()), to_exact(seg2.supporting_line()));
+				auto result = CGAL::intersection(s_line1, s_line2);
 				if (result) {
 
 					if (assign(exact_connection_point, result)) {
@@ -602,6 +616,12 @@ namespace LxGeo
 					connection_points.push_back(seg1.target());
 					connection_points.push_back(seg2.source());
 				}
+			}
+			else
+			{
+				//almost parrallel (angle difference lower than 10degrees)
+				connection_points.push_back(seg1.target());
+				connection_points.push_back(seg2.source());
 			}
 			
 		}
@@ -666,7 +686,8 @@ namespace LxGeo
 
 					for (size_t current_segment_index = 0; current_segment_index < (_all_segments.size() - 1); ++current_segment_index) {
 
-						if (_segment_LID[current_segment_index] == 2 && _segment_PID[current_segment_index] == 293 && _segment_ORDinP[current_segment_index] == 0)
+						BOOST_LOG_TRIVIAL(debug) << "current_segment_indexs: " << current_segment_index;
+						if (_segment_LID[current_segment_index] == 0 && _segment_PID[current_segment_index] == 27 && _segment_ORDinP[current_segment_index] == 0)
 							BOOST_LOG_TRIVIAL(debug) << "check this";
 
 						if(_segment_ORDinP[current_segment_index] ==0)//changement of ring
@@ -697,29 +718,20 @@ namespace LxGeo
 						Inexact_Segment_2 next_segment_in_polygon;
 						// below is to assure next segment is in the same polygon
 						if (_segment_ORDinP[current_segment_index + 1] != 0) next_segment_in_polygon = _all_segments[current_segment_index + 1];
-						else next_segment_in_polygon = _all_segments[current_segment_index - _segment_ORDinP[current_segment_index]];
+						else {
+							size_t next_segment_idx = current_segment_index - _segment_ORDinP[current_segment_index];
+							assert(_segment_ORDinP[next_segment_idx] == 0);
+							next_segment_in_polygon = _all_segments[next_segment_idx];
+						}
 
 						//Inexact_Point_2 projected_point = next_segment_in_polygon.supporting_line().projection(s1_target);
 						//current_ring.addPoint(&OGRPoint(projected_point.x(), projected_point.y()));
 
 						std::vector<Inexact_Point_2> connection_points;
 						connection_points.reserve(2);
-						std::cout.precision(17);
-						get_consecutive_segments_connection_point(_all_segments[current_segment_index], next_segment_in_polygon, connection_points);
-						std::cout << "s1: Linestring(" << _all_segments[current_segment_index].source() << ", " << _all_segments[current_segment_index].target() << ")" << std::endl;
-						std::cout << "s1: Linestring(" << next_segment_in_polygon.source() << ", " << next_segment_in_polygon.target() << ")" << std::endl;
-						std::cout << "intersection: POINT( " << connection_points[0] << ")" << std::endl;
 						
-						
-						auto result = CGAL::intersection(
-							Segment_2(Point_2(367636.21114201029, 5623997.8431751812),
-								Point_2(367638.79948433518, 5623998.1697859755)).supporting_line(),
-							Segment_2(Point_2(367638.79948433518, 5623998.1697859755),
-								Point_2(367639.14885215426, 5623998.2138710646)).supporting_line());
-						Point_2 connection_point;
-						assign(connection_point, result);
-						EK_to_IK to_inexact;
-						std::cout << "intersection: " << to_inexact(connection_point);
+						get_consecutive_segments_connection_point(_all_segments[current_segment_index], next_segment_in_polygon, connection_points);						
+												
 						for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(connection_point.x(), connection_point.y()));
 					}
 
