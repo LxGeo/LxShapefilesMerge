@@ -221,8 +221,8 @@ namespace LxGeo
 									// applying srs transformation if requested
 									std::vector<Inexact_Point_2> R;
 									int ring_size = ring->getNumPoints();
-									R.reserve(ring_size);
-									for (int u = 0; u < ring_size; ++u) {
+									R.reserve(ring_size-1);
+									for (int u = 0; u < ring_size-1; ++u) {
 										OGRPoint pt;
 										ring->getPoint(u, &pt);
 										double x = pt.getX(), y = pt.getY();
@@ -372,7 +372,8 @@ namespace LxGeo
 				}
 			}
 
-			void simplify_ring(std::vector<Inexact_Point_2>& R, std::vector<Inexact_Point_2>& simplified_R) {
+			void simplify_ring(std::vector<Inexact_Point_2>& R, std::vector<Inexact_Point_2>& simplified_R)
+			{
 				simplified_R.reserve(R.size());
 				Inexact_Point_2 turn_m2 = R[R.size() - 2];
 				Inexact_Point_2 turn_m1 = R[R.size() - 1];
@@ -387,8 +388,9 @@ namespace LxGeo
 				simplified_R.shrink_to_fit();
 			}
 
-			void overlay_union_layers(std::vector<boost::filesystem::path>& regularized_layers_path) {
+			std::string overlay_union_layers(std::vector<boost::filesystem::path>& regularized_layers_path) {
 
+				std::string last_overlay_layer_path;
 				//prepare parameters
 				char** union_params = NULL;
 				union_params = CSLAddString(union_params, "INPUT_PREFIX=o_");
@@ -409,7 +411,7 @@ namespace LxGeo
 					}
 					BOOST_LOG_TRIVIAL(debug) << e.what();
 					BOOST_LOG_TRIVIAL(fatal) << "Fatal error! For a quick resolution keep a copy of input data!";
-					return;
+					return NULL;
 				}
 
 				try {
@@ -443,6 +445,7 @@ namespace LxGeo
 						boost::filesystem::path c_out_basename(fmt::format("union_{}.shp", regularized_layers_path.size()- layer_index));
 						boost::filesystem::path outdir(params->temp_dir);
 						boost::filesystem::path c_full_path = outdir / c_out_basename;
+						last_overlay_layer_path = c_full_path.string();
 						OGRLayer* kth_union_layer = create_output_layer(driver, target_ref, c_full_path, temp_dataset_map);
 
 						//union of kth layers
@@ -469,7 +472,7 @@ namespace LxGeo
 					}
 					BOOST_LOG_TRIVIAL(debug) << e.what();
 					BOOST_LOG_TRIVIAL(fatal) << "Fatal error! For a quick resolution keep a copy of input data!";
-					return;
+					return NULL;
 				}
 
 				for (auto out_dataset = datasets_map.begin(); out_dataset != datasets_map.end(); ++out_dataset) {
@@ -478,7 +481,8 @@ namespace LxGeo
 				for (auto out_dataset = temp_dataset_map.begin(); out_dataset != temp_dataset_map.end(); ++out_dataset) {
 					if (out_dataset->second != NULL) GDALClose(out_dataset->second);
 				}
-
+				
+				return last_overlay_layer_path;
 			}
 
 
@@ -514,6 +518,157 @@ namespace LxGeo
 				SG->write_grouped_segments_shapefile(params->output_shapefile);
 				SG->reconstruct_polygons(params->temp_dir);
 
+			}
+
+
+			void read_shapefiles(const std::vector<std::string>& all_paths, std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons)
+			{
+				if (all_paths.empty()) return;
+
+				GDALDataset* dataset_ref = NULL;
+				GDALDataset* dataset = NULL;
+
+				try {
+					// Gets a spatial reference
+					dataset_ref = (GDALDataset*)GDALOpenEx(all_paths[0].c_str(), GDAL_OF_VECTOR, NULL, NULL, NULL);
+					if (dataset_ref == NULL) {
+						throw std::ios_base::failure("Error : unable to load shapefile.");
+					}
+					OGRLayer* layer_ref = dataset_ref->GetLayer(0);
+					OGRSpatialReference* target_ref = layer_ref->GetSpatialRef();
+
+					all_polygons.reserve(all_paths.size());
+					for (size_t i = 0; i < all_paths.size(); ++i) {
+						std::vector<std::vector<std::vector<Inexact_Point_2> > > polygons;
+						if (i == 0) {
+							read_single_shapefile(dataset_ref, target_ref, polygons);
+						}
+						else {
+							read_single_shapefile(all_paths[i], target_ref, polygons);
+						}
+						
+						all_polygons.push_back(polygons);
+					}
+				}
+				catch (std::exception& e) {
+					std::cerr << e.what() << std::endl;
+					all_polygons.clear();
+				}
+
+				if (dataset_ref != NULL) GDALClose(dataset_ref);
+				if (dataset != NULL) GDALClose(dataset);
+			}
+
+			void read_single_shapefile(std::string shapefile_path, OGRSpatialReference* target_ref, std::vector<std::vector<std::vector<Inexact_Point_2> > >& polygons) {
+				GDALDataset* dataset = NULL;
+				dataset = (GDALDataset*)GDALOpenEx(shapefile_path.c_str(), GDAL_OF_VECTOR, NULL, NULL, NULL);
+				read_single_shapefile(dataset, target_ref, polygons);
+				// Reading is over, closes the dataset
+				GDALClose(dataset);
+			}
+
+			void read_single_shapefile(GDALDataset* shapefile_dataset, OGRSpatialReference* target_ref, std::vector<std::vector<std::vector<Inexact_Point_2> > >& polygons) {
+				GDALDataset* dataset = NULL;
+
+				dataset = shapefile_dataset;				
+
+				if (dataset == NULL) {
+					throw std::ios_base::failure("Error : unable to load shapefile.");
+				}
+
+				OGRLayer* layer = dataset->GetLayer(0);
+				OGRSpatialReference* source_ref = layer->GetSpatialRef();
+				OGRCoordinateTransformation* CT = OGRCreateCoordinateTransformation(source_ref, (target_ref==NULL)? source_ref : target_ref);
+
+				// Step 2.
+				// Reads contents of the current shapefile
+
+				size_t n = size_t(layer->GetFeatureCount());
+				polygons.reserve(n);
+
+				for (size_t j = 0; j < n; ++j) {
+					OGRFeature* feat = layer->GetNextFeature();
+					if (feat == NULL) continue;
+
+					OGRGeometry* geom = feat->GetGeometryRef();
+
+					// Assumes the shapefile only contains OGRPolygons
+					if (OGRPolygon* P = dynamic_cast<OGRPolygon*>(geom)) {
+						std::vector<std::vector<Inexact_Point_2> > polygon;
+
+						// Reads rings
+						std::list<OGRLinearRing*> ogr_rings;
+						ogr_rings.push_back(P->getExteriorRing());
+						for (int k = 0; k < P->getNumInteriorRings(); ++k) ogr_rings.push_back(P->getInteriorRing(k));
+
+						for (OGRLinearRing* ring : ogr_rings) {
+							std::vector<Inexact_Point_2> R;
+							int ring_size = ring->getNumPoints();
+
+							R.reserve(ring_size);
+							for (int u = 0; u < ring_size - 1; ++u) {
+								OGRPoint pt;
+								ring->getPoint(u, &pt);
+								double x = pt.getX(), y = pt.getY();
+								CT->Transform(1, &x, &y);
+								R.push_back(Inexact_Point_2(x, y));
+							}
+
+							polygon.push_back(R);
+						}
+
+						polygons.push_back(polygon);
+					}
+				}
+
+			}
+
+			void extract_edges_from_polygons(std::vector<std::vector<std::vector<Inexact_Point_2>>>& c_layer_regularized_polygons,
+				std::vector<Boost_LineString_2>& c_layer_regularized_edges) {
+
+				std::list<Boost_LineString_2> linestrings_list;
+
+				for (auto c_polygon : c_layer_regularized_polygons) {
+					for (auto c_ring : c_polygon) {
+						
+						for (size_t c_pt_idx = 0; c_pt_idx < c_ring.size(); ++c_pt_idx) {
+							size_t next_pt_idx = (c_pt_idx + 1) % c_ring.size();
+							Inexact_Point_2 src_pt = c_ring[c_pt_idx];
+							Inexact_Point_2 trg_pt = c_ring[next_pt_idx];
+							Boost_LineString_2 c_linestring;
+							bg::append(c_linestring, Boost_Point_2(src_pt.x(), src_pt.y()));
+							bg::append(c_linestring, Boost_Point_2(trg_pt.x(), trg_pt.y()));
+							linestrings_list.push_back(c_linestring);
+						}
+						
+					}
+				}
+				c_layer_regularized_edges = std::vector<Boost_LineString_2>(linestrings_list.cbegin(), linestrings_list.cend());
+			}
+
+			void make_rtree_polygons(const std::vector<std::vector<std::vector<Inexact_Point_2> > >& polygons, Boost_RTree_2& RT)
+			{
+				for (size_t i = 0; i < polygons.size(); ++i) {
+					const std::vector<std::vector<Inexact_Point_2> >& polygon = polygons[i];
+
+					// Computes bbox of outer ring
+
+					Bbox_2 B = CGAL::bbox_2(polygon[0].cbegin(), polygon[0].cend());
+					double xmin = B.xmin(), xmax = B.xmax(), ymin = B.ymin(), ymax = B.ymax();
+
+					Boost_Box_2 box(Boost_Point_2(xmin, ymin), Boost_Point_2(xmax, ymax));
+					RT.insert(Boost_Value_2(box, i));
+				}
+			}
+
+			void make_rtree_linestrings(const std::vector<Boost_LineString_2>& linestrings, Boost_RTree_2& RT)
+			{
+				for (size_t i = 0; i < linestrings.size(); ++i) {
+					const Boost_LineString_2& c_linestring = linestrings[i];
+					Boost_Box_2 envelope;
+					bg::envelope(c_linestring, envelope);
+					RT.insert(Boost_Value_2(envelope, i));
+				}
 			}
 
 		}

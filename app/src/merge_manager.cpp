@@ -2,6 +2,7 @@
 #include "defs_cgal.h"
 #include "parameters.h"
 #include "shapefiles_merge_utilities.h"
+#include "overlay_labeler.h"
 
 
 namespace LxGeo
@@ -64,7 +65,25 @@ namespace LxGeo
 				segment_PID,
 				segment_ORDinP);
 
-			overlay_union_layers(params->regularized_layers_path);
+			std::string total_overlay_layer_path;
+			total_overlay_layer_path = overlay_union_layers(params->regularized_layers_path);
+
+			all_segments.clear();
+			segment_LID.clear();
+			segment_PID.clear();
+			segment_ORDinP.clear();
+
+			// total overlay union path
+			std::string temp_overlay_layer_path = params->temp_dir + "\\temp_overlay_layer.shp";
+			//  facet labeling optimizer
+
+			std::vector<std::string> regularized_layers_path_string;
+			for (auto reg_path : params->regularized_layers_path) regularized_layers_path_string.push_back(reg_path.string());
+			OverlayLabeler Ol = OverlayLabeler(temp_overlay_layer_path,
+				regularized_layers_path_string);
+
+			Ol.construct_graph();
+
 
 		}
 	}

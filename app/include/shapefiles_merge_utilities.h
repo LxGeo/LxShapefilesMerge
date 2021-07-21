@@ -2,6 +2,7 @@
 #include "defs.h"
 #include <boost/filesystem.hpp>
 #include "defs_cgal.h"
+#include "defs_boost.h"
 #include <gdal.h>
 #include <gdal_priv.h>
 
@@ -34,7 +35,7 @@ namespace LxGeo
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP);
 
-			void overlay_union_layers(std::vector<boost::filesystem::path> &regularized_layers_path);
+			std::string overlay_union_layers(std::vector<boost::filesystem::path> &regularized_layers_path);
 
 			double segments_overlap_ratios(const Inexact_Segment_2& segment1, const Inexact_Segment_2& segment2);
 
@@ -42,14 +43,19 @@ namespace LxGeo
 
 			void simplify_ring(std::vector<Inexact_Point_2>& R, std::vector<Inexact_Point_2>& simplified_R);
 
-			
-			//void read_shapefiles(const std::vector<std::string>& all_paths, std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons);
+			void read_shapefiles(const std::vector<std::string>& all_paths, std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons);
 
-			//void recenter(std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons, Inexact_Vector_2& shift, Bbox_2& bbox);
+			void extract_edges_from_polygons(std::vector<std::vector<std::vector<Inexact_Point_2>>>& c_layer_regularized_polygons,
+				std::vector<Boost_LineString_2>& c_layer_regularized_edges);
 
-			//void make_segments(const std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons, std::vector<Inexact_Segment_2>& all_segments);
+			void make_rtree_polygons(const std::vector<std::vector<std::vector<Inexact_Point_2> > >& polygons, Boost_RTree_2& RT);
 
-			//void write_shapefile(const std::string& input_filename, const std::string& output_filename, const std::vector<Polygon_with_attributes*>& polygons);
+			void make_rtree_linestrings(const std::vector<Boost_LineString_2>& linestrings, Boost_RTree_2& RT);
+
+			void read_single_shapefile(std::string shapefile_path, OGRSpatialReference* target_ref, std::vector<std::vector<std::vector<Inexact_Point_2> > >& polygons);
+
+			void read_single_shapefile(GDALDataset* shapefile_dataset, OGRSpatialReference* target_ref, std::vector<std::vector<std::vector<Inexact_Point_2> > >& polygons);
+
 		}
 	}
 }

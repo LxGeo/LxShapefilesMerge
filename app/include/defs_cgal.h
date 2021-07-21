@@ -2,6 +2,7 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 #include <CGAL/Polygon_2.h>
+#include <CGAL/Polygon_with_holes_2.h>
 
 #include <CGAL/Cartesian_converter.h>
 
@@ -28,6 +29,7 @@ namespace LxGeo
 		typedef IK::Direction_2 Inexact_Direction_2;
 		typedef IK::Triangle_2 Inexact_Triangle_2;
 		typedef CGAL::Polygon_2<IK> Inexact_Polygon_2;
+		//typedef CGAL::Polygon_with_holes_2<IK> Inexact_Polygon_with_holes_2;
 
 		typedef CGAL::Bbox_2 Bbox_2;
 
