@@ -37,15 +37,22 @@ else()
 endif()
 
 include_directories(include)
+include_directories("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/shared/include/")
+include_directories("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/IO_DATA/include/")
 
 add_definitions(-D_CONSOLE -D_SCL_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)
 
 file(GLOB_RECURSE LX_SHPMERGE_SRCS include/* src/*)
 add_executable(LxShapefilesMerge ${LX_SHPMERGE_SRCS})
-
-#add_dependencies(LxShapefilesMerge LxGeoFactoryShared)
+add_dependencies(${PROJECT_NAME} LxGeoFactoryShared)
+add_dependencies(${PROJECT_NAME} IO_DATA)
 
 target_link_libraries(LxShapefilesMerge ${GDAL_LIBRARIES} ${Boost_FILESYSTEM_LIBRARY} ${Boost_LOG_LIBRARY} ${OpenCV_LIBS} fmt::fmt fmt::fmt-header-only)
 
+target_link_libraries(${PROJECT_NAME} debug ../out/Debug/LxGeoFactoryShared)
+target_link_libraries(${PROJECT_NAME} optimized ../out/Release/LxGeoFactoryShared)
+
+target_link_libraries(${PROJECT_NAME} debug ../out/Debug/IO_DATA)
+target_link_libraries(${PROJECT_NAME} optimized ../out/Release/IO_DATA)
 
 target_compile_options(LxShapefilesMerge PRIVATE ${OpenMP_CXX_FLAGS})
