@@ -23,12 +23,14 @@ namespace LxGeo
 				//load regularizd polygons
 				read_shapefiles(regularized_layers_paths, all_regularized_polygons);
 				// Extract edges from regularized polygons
-				all_regularized_edges.reserve(all_regularized_polygons.size());
+				all_regularized_edges.resize(all_regularized_polygons.size());
 				for (size_t layer_idx = 0; layer_idx < all_regularized_polygons.size(); ++layer_idx) {
 					extract_edges_from_polygons(all_regularized_polygons[layer_idx], all_regularized_edges[layer_idx]);
 				}
 
 				//// generate rTrees for each layer of regularized (polygons and edges)
+				polygon_trees.resize(all_regularized_polygons.size());
+				edges_trees.resize(all_regularized_polygons.size());
 				for (size_t layer_idx = 0; layer_idx < regularized_layers_paths.size(); ++layer_idx) {
 					make_rtree_polygons(all_regularized_polygons[layer_idx], polygon_trees[layer_idx]);
 					make_rtree_linestrings(all_regularized_edges[layer_idx], edges_trees[layer_idx]);
@@ -37,7 +39,7 @@ namespace LxGeo
 				//load overlay facets
 				read_single_shapefile(overlay_layer_path, NULL, all_facets);
 
-				FG = BoostFacetGraph(all_facets.size()+1);
+				//FG = BoostFacetGraph(all_facets.size()+1);
 			};
 			
 			void OverlayLabeler::construct_graph();
@@ -67,8 +69,9 @@ namespace LxGeo
 			std::vector<std::vector<Boost_LineString_2>> all_regularized_edges;
 			std::vector<Boost_RTree_2> edges_trees; // regularized edges Rtrees
 
-			boost::property_map<BoostFacetGraph, boost::vertex_index_t>::type vertex_idx_map = boost::get(boost::vertex_index_t(), FG);
-			boost::property_map<BoostFacetGraph, boost::edge_index_t>::type edge_idx_map = boost::get(boost::edge_index_t(), FG);
+			boost::property_map<BoostFacetGraph, boost::vertex_index_t>::type vertex_idx_map = boost::get(boost::vertex_index, FG);
+			boost::property_map<BoostFacetGraph, boost::edge_index_t>::type edge_idx_map = boost::get(boost::edge_index, FG);
+			std::vector<edge_descriptor> graph_edge_descriptors;
 
 		};
 	}

@@ -11,6 +11,7 @@ struct VertexData
 struct EdgeData
 {
     std::vector<bool> edge_e_layers; // vector of edge existence in layers
+    size_t id;
 };
 
 typedef boost::adjacency_list<boost::vecS, boost::vecS,

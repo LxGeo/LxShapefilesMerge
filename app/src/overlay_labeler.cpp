@@ -14,12 +14,12 @@ namespace LxGeo
 
 		void OverlayLabeler::construct_graph() {
 
-			auto facet_e_count_map = boost::get(&VertexData::facet_e_count, FG);
-			auto edge_e_layers_map = boost::get(&EdgeData::edge_e_layers, FG);
+			//auto facet_e_count_map = boost::get(&VertexData::facet_e_count, FG);
+			//auto edge_e_layers_map = boost::get(&EdgeData::edge_e_layers, FG);
 
 			// add background vertex with descriptor 0
 			vertex_descriptor background_vertex = boost::add_vertex(FG);
-			facet_e_count_map[background_vertex] = 0;
+			FG[background_vertex].facet_e_count = 0;
 			// Iterate over all facets
 			for (size_t facet_idx = 0; facet_idx < all_facets.size(); ++facet_idx) {
 
@@ -29,17 +29,17 @@ namespace LxGeo
 
 				// construct boost polygon with holes
 				for (auto c_ring_pt : facet_polygon[0]) bg::append(b_facet_polygon.outer(), transform_C2B_Point(c_ring_pt));
-				for (size_t inner_ring_idx = 1; inner_ring_idx < facet_polygon.size(); ++inner_ring_idx) {
+				/*for (size_t inner_ring_idx = 1; inner_ring_idx < facet_polygon.size(); ++inner_ring_idx) {
 					for (auto c_ring_pt : facet_polygon[inner_ring_idx]) bg::append(b_facet_polygon.inners()[inner_ring_idx - 1], transform_C2B_Point(c_ring_pt));
-				}
+				}*/
 				// Get representative_point ( point that's within the polygon and outside its inner rings ) 
 				Boost_Point_2 representative_point;
-				boost::geometry::point_on_surface(b_facet_polygon, representative_point);
+				boost::geometry::centroid(b_facet_polygon, representative_point); //point_on_surface
 				size_t point_count = point_count_in_layers(representative_point);
 
 				// add current facet to graph
 				vertex_descriptor c_vertex = boost::add_vertex(FG);
-				facet_e_count_map[c_vertex] = point_count;
+				FG[c_vertex].facet_e_count = static_cast<short int>(point_count);
 
 				for (auto c_ring : facet_polygon) {
 
@@ -49,7 +49,7 @@ namespace LxGeo
 						bg::append(c_edge_linestring, transform_C2B_Point(c_ring[edge_idx]));
 						bg::append(c_edge_linestring, transform_C2B_Point(c_ring[edge_idx + 1]));
 
-						vertex_descriptor source_vertex = vertex_descriptor(facet_idx + 1);
+						vertex_descriptor source_vertex = c_vertex;
 						vertex_descriptor target_vertex;
 						std::vector<bool> layers_overlap_search_result;
 
@@ -65,24 +65,30 @@ namespace LxGeo
 							//// Set target vertex to background
 							target_vertex = background_vertex;
 
+							auto add_pair = boost::add_edge(source_vertex, target_vertex, FG);
+							FG[add_pair.first].edge_e_layers = layers_overlap_search_result;
+							FG[add_pair.first].id = graph_edge_descriptors.size();
+							graph_edge_descriptors.push_back(add_pair.first);
 						}
 						else {
 							// if edge already added
-							edge_descriptor c_edge;
-							boost::get(search_result.second, FG, c_edge);
+							edge_descriptor c_edge = graph_edge_descriptors[search_result.second];
 							layers_overlap_search_result = FG[c_edge].edge_e_layers;
 							vertex_descriptor u = source(c_edge, FG);
 							vertex_descriptor v = target(c_edge, FG);
-							if (background_vertex != u & background_vertex != v) throw std::exception("background_vertex check it !");
+							//if ((background_vertex != u) & (background_vertex != v)) throw std::exception("background_vertex check it !");
 
 							target_vertex = (u == background_vertex) ? v : u;
 							// remove existing edge
 							boost::remove_edge(c_edge, FG);
+
+							auto add_pair = boost::add_edge(source_vertex, target_vertex, FG);
+							graph_edge_descriptors[search_result.second] =add_pair.first;
+							FG[add_pair.first].edge_e_layers = layers_overlap_search_result;
+							FG[add_pair.first].id = search_result.second;
+							if (!add_pair.second) throw std::exception("edge already added check it !");
 						}
 
-						auto add_pair = boost::add_edge(source_vertex, target_vertex, FG);
-						edge_e_layers_map[add_pair.first] = layers_overlap_search_result;
-						if (! add_pair.second) throw std::exception("edge already added check it !");
 					}
 				}
 
@@ -99,7 +105,12 @@ namespace LxGeo
 			for (size_t c_layer_idx = 0; c_layer_idx < layers_count; ++c_layer_idx) {
 
 				const Boost_RTree_2& RT = polygon_trees[c_layer_idx];
-				Boost_Box_2 query(search_point, search_point);
+
+				Boost_LineString_2 temp_linestring;
+				bg::append(temp_linestring, Boost_Point_2(bg::get<0>(search_point)+0.005, bg::get<1>(search_point) + 0.005));
+				bg::append(temp_linestring, Boost_Point_2(bg::get<0>(search_point) - 0.005, bg::get<1>(search_point) - 0.005));
+				Boost_Box_2 query;
+				bg::envelope(temp_linestring, query);
 				std::vector<Boost_Value_2> candidates;
 				RT.query(bgi::intersects(query), std::back_inserter(candidates));
 
@@ -152,14 +163,18 @@ namespace LxGeo
 				const std::vector<Boost_LineString_2>& c_layer_edges = all_regularized_edges[c_layer_idx];
 				const Boost_RTree_2& c_layer_edges_trees = edges_trees[c_layer_idx];
 
-				Boost_Box_2 query(search_edge.at(0), search_edge.at(1));
+				Boost_Box_2 query;
+				bg::envelope(search_edge, query);
 				std::vector<Boost_Value_2> candidates;
 				c_layer_edges_trees.query(bgi::intersects(query), std::back_inserter(candidates));
 
 				for (size_t u = 0; u < candidates.size(); ++u) {
 
 					const Boost_LineString_2& c_candidate_linestring = c_layer_edges[candidates[u].second];
-					if (boost::geometry::overlaps(search_edge, c_candidate_linestring)) {
+					Boost_LineString_2 intersection_output;
+					boost::geometry::intersection(search_edge, c_candidate_linestring, intersection_output);
+					//if (boost::geometry::covered_by(search_edge, c_candidate_linestring)) {
+					if (intersection_output.size()>0){
 						search_result[c_layer_idx] = true;
 						break;
 					}
@@ -194,7 +209,8 @@ namespace LxGeo
 			size_t new_edge_index = all_shared_edges.size();
 			all_shared_edges.push_back(edge_to_add);
 
-			Boost_Box_2 envelope(edge_to_add.at(0), edge_to_add.at(1));
+			Boost_Box_2 envelope;
+			bg::envelope(edge_to_add, envelope);
 			// add to all_shared_edges tree
 			shared_edges_tree.insert(Boost_Value_2(envelope, new_edge_index));
 		}
