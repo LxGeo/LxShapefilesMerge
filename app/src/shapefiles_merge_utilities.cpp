@@ -111,6 +111,11 @@ namespace LxGeo
 				return pts_collinear;
 			}
 
+			short int cyclcic_order_distance(short int a, short int b, short int cycle) {
+				short int result = abs(a - b);
+				return std::min<short int>(result, cycle +1 - result);
+			}
+
 			double segments_overlap_ratios(const Inexact_Segment_2& segment1, const Inexact_Segment_2& segment2)
 			{
 
@@ -148,6 +153,7 @@ namespace LxGeo
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP,
+				std::vector<short int>& segment_RRSize,
 				const bool apply_srs_transform)
 			{
 				if (all_paths.empty()) return;
@@ -248,6 +254,9 @@ namespace LxGeo
 										segment_PID.push_back(j);
 										// if two segments share the same ORDinP & PID than at least an outer ring exists.
 										segment_ORDinP.push_back(l- c_ignored_segments_count);
+									}
+									for (size_t added_segment_cnt = 0; added_segment_cnt < simplified_R.size() - c_ignored_segments_count; ++added_segment_cnt) {
+										segment_RRSize.push_back(simplified_R.size() - c_ignored_segments_count);
 									}
 
 								}
@@ -489,7 +498,8 @@ namespace LxGeo
 			void regularize_segments(std::vector<Inexact_Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
-				std::vector<short int>& segment_ORDinP) {
+				std::vector<short int>& segment_ORDinP,
+				std::vector<short int>& segment_RRSize) {
 
 				BOOST_LOG_TRIVIAL(info) << "Computing segments angles!";
 				std::vector<double> segment_angle;
@@ -509,7 +519,7 @@ namespace LxGeo
 				BOOST_LOG_TRIVIAL(debug) << "Elapsed time for segments tree creation: " << float(t_end_segments_tree - t_begin_segments_tree) / CLOCKS_PER_SEC << " s.";
 				
 				SegmentGraph* SG = new SegmentGraph(all_segments,
-					segment_LID, segment_PID, segment_ORDinP, segment_angle, segments_tree);
+					segment_LID, segment_PID, segment_ORDinP, segment_RRSize, segment_angle, segments_tree);
 
 				//SG->write_grouped_segments_shapefile(params->output_shapefile);
 				SG->fill_graph();

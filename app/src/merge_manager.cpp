@@ -51,19 +51,23 @@ namespace LxGeo
 			std::vector<short int> segment_PID;
 			// segment_ORDinP contains segments respective segment order in a polygon
 			std::vector<short int> segment_ORDinP;
+			// segment_resp_ring_size
+			std::vector<short int> segment_RRSize;
 
 			load_segments_data(all_input_shapefiles,
 				all_segments,
 				segment_LID,
 				segment_PID,
 				segment_ORDinP,
+				segment_RRSize,
 				apply_srs_transform);
 
 			// Regularizing Segments
 			regularize_segments(all_segments,
 				segment_LID,
 				segment_PID,
-				segment_ORDinP);
+				segment_ORDinP,
+				segment_RRSize);
 
 			std::string total_overlay_layer_path;
 			total_overlay_layer_path = overlay_union_layers(params->regularized_layers_path);
@@ -74,7 +78,7 @@ namespace LxGeo
 			segment_ORDinP.clear();
 
 			// total overlay union path
-			std::string temp_overlay_layer_path = params->temp_dir + "\\temp_overlay_layer.shp";
+			std::string temp_overlay_layer_path = params->temp_dir + "\\union_1.shp";
 			//  facet labeling optimizer
 
 			std::vector<std::string> regularized_layers_path_string;

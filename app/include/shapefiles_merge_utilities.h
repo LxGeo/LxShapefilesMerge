@@ -28,14 +28,18 @@ namespace LxGeo
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP,
+				std::vector<short int>& segment_RRSize,
 				const bool apply_srs_transform);
 
 			void regularize_segments(std::vector<Inexact_Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
-				std::vector<short int>& segment_ORDinP);
+				std::vector<short int>& segment_ORDinP,
+				std::vector<short int>& segment_RRSize);
 
 			std::string overlay_union_layers(std::vector<boost::filesystem::path> &regularized_layers_path);
+
+			short int cyclcic_order_distance(short int a, short int b, short int cycle);
 
 			double segments_overlap_ratios(const Inexact_Segment_2& segment1, const Inexact_Segment_2& segment2);
 

@@ -28,9 +28,10 @@ namespace LxGeo
 			std::vector<short int>& segment_LID,
 			std::vector<short int>& segment_PID,
 			std::vector<short int>& segment_ORDinP,
+			std::vector<short int>& segment_RRSize,
 			std::vector<double>& segment_angle,
-			Boost_RTree_2& segments_tree): _all_segments(all_segments), _segment_LID(segment_LID), _segment_PID(segment_PID), _segment_ORDinP(segment_ORDinP), _segment_angle(segment_angle),
-			_segments_tree(segments_tree)
+			Boost_RTree_2& segments_tree): _all_segments(all_segments), _segment_LID(segment_LID), _segment_PID(segment_PID),
+			_segment_ORDinP(segment_ORDinP), _segment_RRSize(segment_RRSize), _segment_angle(segment_angle),	_segments_tree(segments_tree)
 		{
 			// load weights and thresh from parameters
 			e_distance_weight = params->e_distance_weight;
@@ -237,16 +238,47 @@ namespace LxGeo
 
 		void SegmentGraph::get_connected_vertices_indices(size_t vertex_idx, std::vector<size_t>& c_connected_vertices_indices) {
 
-			//boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
-				//boost::get(boost::vertex_index, SG);
+			std::list<size_t> full_vertices_indices;
 
-			c_connected_vertices_indices.push_back( vertex_idx );
+			full_vertices_indices.push_back( vertex_idx );
 			adjacency_iterator ai, ai_end;
 			for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_descriptor(vertex_idx), SG); ai != ai_end; ++ai) {
-				c_connected_vertices_indices.push_back(*ai);
+				full_vertices_indices.push_back(*ai);
 			}
 
+			filter_same_polygon_adjacent_indices(full_vertices_indices);
+
+			for (auto c_vertex_idx : full_vertices_indices) c_connected_vertices_indices.push_back(c_vertex_idx);
 				
+		}
+
+		void SegmentGraph::filter_same_polygon_adjacent_indices(std::list<size_t>& c_connected_vertices_indices) {
+
+			// start from second element
+			for (auto possible_adjacent = std::next(c_connected_vertices_indices.begin()); possible_adjacent != c_connected_vertices_indices.end(); ++possible_adjacent) {
+				bool delete_element = false;
+				for (auto c_element = c_connected_vertices_indices.begin(); c_element != c_connected_vertices_indices.end(); ++c_element) {
+					// check if possible adjacent is in the same LID & same PID 
+					if ((_segment_LID[*c_element] == _segment_LID[*possible_adjacent]) & (_segment_PID[*c_element] == _segment_PID[*possible_adjacent])) {
+						// check if part of same ring
+						const size_t& c_element_ring_size = _segment_RRSize[*c_element];
+						const size_t& possible_adjacent_ring_size = _segment_RRSize[*possible_adjacent];
+						if (c_element_ring_size != possible_adjacent_ring_size) continue;
+						//check if OrdIP difference is different than 2 // modulos polygon size
+						short int segment_distance = shapefiles_merge_utils::cyclcic_order_distance(
+							_segment_ORDinP[*possible_adjacent], _segment_ORDinP[*c_element], c_element_ring_size
+						);
+						if (segment_distance == 2) {
+							delete_element = true;
+							break;
+						}
+					}
+				}
+				if (delete_element) {
+					possible_adjacent = c_connected_vertices_indices.erase(possible_adjacent);
+					--possible_adjacent;
+				}
+			}
 		}
 
 		size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices)
@@ -686,9 +718,8 @@ namespace LxGeo
 
 					for (size_t current_segment_index = 0; current_segment_index < (_all_segments.size() - 1); ++current_segment_index) {
 
-						BOOST_LOG_TRIVIAL(debug) << "current_segment_indexs: " << current_segment_index;
-						if (_segment_LID[current_segment_index] == 0 && _segment_PID[current_segment_index] == 27 && _segment_ORDinP[current_segment_index] == 0)
-							BOOST_LOG_TRIVIAL(debug) << "check this";
+						/*if (_segment_LID[current_segment_index] == 0 && _segment_PID[current_segment_index] == 27 && _segment_ORDinP[current_segment_index] == 0)
+							BOOST_LOG_TRIVIAL(debug) << "check this";*/
 
 						if(_segment_ORDinP[current_segment_index] ==0)//changement of ring
 						{

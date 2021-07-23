@@ -21,6 +21,7 @@ namespace LxGeo
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP,
+				std::vector<short int>& segment_RRSize,
 				std::vector<double>& segment_angle,
 				Boost_RTree_2& segments_tree);
 
@@ -41,6 +42,8 @@ namespace LxGeo
 			size_t SegmentGraph::get_min_centrality_vertex_index();
 
 			void SegmentGraph::get_connected_vertices_indices(size_t vertex_idx, std::vector<size_t>& c_connected_vertices_indices);
+
+			void SegmentGraph::filter_same_polygon_adjacent_indices(std::list<size_t>& c_connected_vertices_indices);
 
 			size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices);
 
@@ -76,6 +79,7 @@ namespace LxGeo
 			std::vector<short int>& _segment_LID;
 			std::vector<short int>& _segment_PID;
 			std::vector<short int>& _segment_ORDinP;
+			std::vector<short int>& _segment_RRSize;
 			std::vector<double> _segment_angle;
 			Boost_RTree_2 _segments_tree;
 			size_t groupes_count;
