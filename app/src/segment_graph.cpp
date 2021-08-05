@@ -259,6 +259,8 @@ namespace LxGeo
 				bool delete_element = false;
 				for (auto c_element = c_connected_vertices_indices.begin(); c_element != c_connected_vertices_indices.end(); ++c_element) {
 					// check if possible adjacent is in the same LID & same PID 
+					/*if (_segment_LID[*c_element] == 0 && _segment_PID[*c_element] == 27 && _segment_ORDinP[*c_element] == 14)
+						BOOST_LOG_TRIVIAL(debug) << "check this";*/
 					if ((_segment_LID[*c_element] == _segment_LID[*possible_adjacent]) & (_segment_PID[*c_element] == _segment_PID[*possible_adjacent])) {
 						// check if part of same ring
 						const size_t& c_element_ring_size = _segment_RRSize[*c_element];
@@ -600,6 +602,8 @@ namespace LxGeo
 				//write polygon to respective dataset
 				feature = OGRFeature::CreateFeature(current_dataset_layer->GetLayerDefn());
 				feature->SetGeometry(&current_polygon);
+				/*OGRPolygon* v_c_polygon = dynamic_cast<OGRPolygon*>(current_polygon.MakeValid());
+				feature->SetGeometry(v_c_polygon);*/
 				feature->SetField("ID", _segment_PID[current_segment_index]);
 				// saving feature
 				OGRErr error = current_dataset_layer->CreateFeature(feature);
@@ -614,11 +618,6 @@ namespace LxGeo
 			// if almost parralel connect endings
 			Line_2 s_line1 = to_exact(seg1.supporting_line());
 			Line_2 s_line2 = to_exact(seg2.supporting_line());
-			/*Vector_2 s_vector_1 = s_line1.to_vector();
-			Vector_2 s_vector_2 = s_line2.to_vector();
-			s_vector_1 = s_vector_1/CGAL::sqrt(s_vector_1.squared_length());
-			s_vector_2 = s_vector_2/CGAL::sqrt(s_vector_2.squared_length());
-			FT E_cross_product = s_vector_1 * s_vector_2;*/
 			Inexact_Vector_2 s_vector_1 = seg1.to_vector();
 			s_vector_1 = s_vector_1 / sqrt(s_vector_1.squared_length());
 			Inexact_Vector_2 s_vector_2 = seg2.to_vector();

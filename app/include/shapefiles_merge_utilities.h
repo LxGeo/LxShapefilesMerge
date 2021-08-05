@@ -47,6 +47,8 @@ namespace LxGeo
 
 			void simplify_ring(std::vector<Inexact_Point_2>& R, std::vector<Inexact_Point_2>& simplified_R);
 
+			void simplify_ring(OGRLinearRing* R);
+
 			void read_shapefiles(const std::vector<std::string>& all_paths, std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons);
 
 			void extract_edges_from_polygons(std::vector<std::vector<std::vector<Inexact_Point_2>>>& c_layer_regularized_polygons,

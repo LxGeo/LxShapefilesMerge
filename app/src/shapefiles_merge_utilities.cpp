@@ -112,8 +112,8 @@ namespace LxGeo
 			}
 
 			short int cyclcic_order_distance(short int a, short int b, short int cycle) {
-				short int result = abs(a - b);
-				return std::min<short int>(result, cycle +1 - result);
+				short int result = abs(a - b)%cycle;
+				return std::min<short int>(result, cycle - result);
 			}
 
 			double segments_overlap_ratios(const Inexact_Segment_2& segment1, const Inexact_Segment_2& segment2)
@@ -255,8 +255,8 @@ namespace LxGeo
 										// if two segments share the same ORDinP & PID than at least an outer ring exists.
 										segment_ORDinP.push_back(l- c_ignored_segments_count);
 									}
-									for (size_t added_segment_cnt = 0; added_segment_cnt < simplified_R.size() - c_ignored_segments_count; ++added_segment_cnt) {
-										segment_RRSize.push_back(simplified_R.size() - c_ignored_segments_count);
+									for (size_t added_segment_cnt = 0; added_segment_cnt < simplified_R.size() -1- c_ignored_segments_count; ++added_segment_cnt) {
+										segment_RRSize.push_back(simplified_R.size() - 1 - c_ignored_segments_count);
 									}
 
 								}
@@ -365,8 +365,16 @@ namespace LxGeo
 						for (size_t sub_geom_idx = 0; sub_geom_idx < c_multipolygon->getNumGeometries(); ++sub_geom_idx) {
 							OGRGeometry* sub_geom = c_multipolygon->getGeometryRef(sub_geom_idx);
 							if (sub_geom->getGeometryType() == wkbPolygon) {
+								// get current polygon rings
+								OGRPolygon* P = dynamic_cast<OGRPolygon*>(sub_geom);
+								std::list<OGRLinearRing*> ogr_rings;
+								ogr_rings.push_back(P->getExteriorRing());
+								for (int k = 0; k < P->getNumInteriorRings(); ++k) ogr_rings.push_back(P->getInteriorRing(k));
+								//simplify current polygon rings
+								for (OGRLinearRing* c_ring : ogr_rings) { simplify_ring(c_ring); }
+
 								OGRFeature* feature = OGRFeature::CreateFeature(c_layer->GetLayerDefn());
-								feature->SetGeometry(sub_geom->clone());
+								feature->SetGeometry(P->clone());
 								OGRErr error = c_layer->CreateFeature(feature);
 								if (error != OGRERR_NONE) BOOST_LOG_TRIVIAL(warning) << fmt::format("Error code : {}", error);
 								OGRFeature::DestroyFeature(feature);
@@ -397,6 +405,23 @@ namespace LxGeo
 				simplified_R.shrink_to_fit();
 			}
 
+			void simplify_ring(OGRLinearRing* R) {
+				OGRLinearRing temp_ring(*R);
+				R->empty();
+				Inexact_Point_2 turn_m2(temp_ring.getX(temp_ring.getNumPoints() - 2), temp_ring.getY(temp_ring.getNumPoints() - 2));
+				Inexact_Point_2 turn_m1(temp_ring.getX(temp_ring.getNumPoints() - 1), temp_ring.getY(temp_ring.getNumPoints() - 1));
+				for (size_t c_point_idx = 0; c_point_idx < temp_ring.getNumPoints(); ++c_point_idx) {
+					Inexact_Point_2 c_point(temp_ring.getX(c_point_idx), temp_ring.getY(c_point_idx));
+					if (!pts_collinear_2(c_point, turn_m1, turn_m2)) {
+						R->addPoint(&OGRPoint(turn_m1.x(), turn_m1.y()));
+					}
+					turn_m2 = turn_m1;
+					turn_m1 = c_point;
+				}
+				R->closeRings();
+			}
+
+
 			std::string overlay_union_layers(std::vector<boost::filesystem::path>& regularized_layers_path) {
 
 				std::string last_overlay_layer_path;
@@ -405,8 +430,8 @@ namespace LxGeo
 				union_params = CSLAddString(union_params, "INPUT_PREFIX=o_");
 				union_params = CSLAddString(union_params, "METHOD_PREFIX=n_");
 				union_params = CSLAddString(union_params, "SKIP_FAILURES=YES");
-				union_params = CSLAddString(union_params, "PROMOTE_TO_MULTI=NO");
-				union_params = CSLAddString(union_params, "KEEP_LOWER_DIMENSION_GEOMETRIES=NO");
+				union_params = CSLAddString(union_params, "PROMOTE_TO_MULTI=YES");
+				union_params = CSLAddString(union_params, "KEEP_LOWER_DIMENSION_GEOMETRIES=YES");
 				std::map<std::string, GDALDataset*> temp_dataset_map;
 				std::map<size_t, GDALDataset*> datasets_map;
 				std::map<size_t, OGRLayer*> layers_map;
