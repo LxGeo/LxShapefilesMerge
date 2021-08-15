@@ -17,7 +17,7 @@ namespace LxGeo
 		{
 		public:
 			SegmentGraph() = default;
-			SegmentGraph(std::vector<Inexact_Segment_2>& all_segments,
+			SegmentGraph(std::vector<Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP,
@@ -53,15 +53,15 @@ namespace LxGeo
 
 			void SegmentGraph::fuse_segments();
 
-			void SegmentGraph::get_respective_segment(size_t groupe_idx, std::vector<Inexact_Segment_2*>& respective_segments);
+			void SegmentGraph::get_respective_segment(size_t groupe_idx, std::vector<Segment_2*>& respective_segments);
 
-			void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments);
+			void SegmentGraph::get_best_fitting_line(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments);
 			
-			void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
+			void SegmentGraph::get_best_fitting_line(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
 
-			void SegmentGraph::get_best_fitting_line_by_direction(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments);
+			void SegmentGraph::get_best_fitting_line_by_direction(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments);
 
-			void SegmentGraph::get_best_fitting_line_by_direction(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
+			void SegmentGraph::get_best_fitting_line_by_direction(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
 
 			void SegmentGraph::add_polygon_to_layer(std::list<OGRLinearRing>& ex_int_rings, OGRLayer* current_dataset_layer, size_t current_segment_index);
 
@@ -75,7 +75,7 @@ namespace LxGeo
 			double MAX_GROUPING_DISTANCE;
 			double MAX_GROUPING_ANGLE_DEG;
 			double MAX_GROUPING_ANGLE_RAD;
-			std::vector<Inexact_Segment_2> _all_segments;
+			std::vector<Segment_2> _all_segments;
 			std::vector<short int>& _segment_LID;
 			std::vector<short int>& _segment_PID;
 			std::vector<short int>& _segment_ORDinP;

@@ -17,6 +17,9 @@ namespace LxGeo
 		namespace shapefiles_merge_utils
 		{
 
+			IK_to_EK to_exact;
+			EK_to_IK to_inexact;
+
 			using namespace GeometryFactoryShared;
 
 			int check_shapefiles_validity(std::vector<std::string>& all_paths, bool& apply_srs_transform)
@@ -98,18 +101,7 @@ namespace LxGeo
 				return pts_collinear;
 			}
 
-			bool pts_collinear_2(Inexact_Point_2 p1, Inexact_Point_2 p2, Inexact_Point_2 p3) {
-				Inexact_Vector_2 s_vector_1(p2,p1);
-				Inexact_Vector_2 s_vector_2(p2,p3);
-				s_vector_1 = s_vector_1 / sqrt(s_vector_1.squared_length());
-				s_vector_2 = s_vector_2 / sqrt(s_vector_2.squared_length());
-				if (s_vector_1.squared_length() == 0 || s_vector_2.squared_length() == 0) return true;
-				double cross_product = s_vector_1 * s_vector_2;
-				double diff_angle = acos(cross_product);
-				double angle_mod = asin(sqrt(sin(diff_angle) * sin(diff_angle)));
-				bool pts_collinear = (angle_mod < (M_PI / 180));
-				return pts_collinear;
-			}
+			
 
 			short int cyclcic_order_distance(short int a, short int b, short int cycle) {
 				short int result = abs(a - b)%cycle;
@@ -148,8 +140,17 @@ namespace LxGeo
 				return  std::max(line2_X_overlap + line2_Y_overlap, line1_X_overlap + line1_Y_overlap);
 			}
 
+			Point_2 exact_load(const Inexact_Point_2& in_pt) {
+				std::stringstream stream;
+				stream << std::setprecision(17) << in_pt.x() << " " << in_pt.y();
+				FT x, y;
+				stream >> x >> y;
+				Point_2 out_pt = Point_2(x, y);
+				return out_pt;
+			}
+
 			void load_segments_data(std::vector<std::string>& all_paths,
-				std::vector<Inexact_Segment_2>& all_segments,
+				std::vector<Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP,
@@ -227,8 +228,8 @@ namespace LxGeo
 									// applying srs transformation if requested
 									std::vector<Inexact_Point_2> R;
 									int ring_size = ring->getNumPoints();
-									R.reserve(ring_size-1);
-									for (int u = 0; u < ring_size-1; ++u) {
+									R.reserve(ring_size);
+									for (int u = 0; u < ring_size; ++u) {
 										OGRPoint pt;
 										ring->getPoint(u, &pt);
 										double x = pt.getX(), y = pt.getY();
@@ -238,13 +239,18 @@ namespace LxGeo
 									R.shrink_to_fit();
 
 									//simplify edge
-									std::vector<Inexact_Point_2> simplified_R;
-									simplify_ring(R, simplified_R);
+									std::vector<Inexact_Point_2> simplified_R = simplify_aberrant_polygon(R);
+									
+									if (simplified_R.size() < 3)
+										BOOST_LOG_TRIVIAL(debug) << "oversimplify " << i << "" << j;
+									/*std::vector<Inexact_Point_2> simplified_R;
+									simplify_ring(R, simplified_R);*/
 
 									size_t c_ignored_segments_count = 0;
 									for (size_t l = 0; l < simplified_R.size()-1; ++l) {
-										Inexact_Segment_2 segment_to_add(simplified_R[l], simplified_R[l + 1]);
-										if (segment_to_add.squared_length() == 0) {
+										
+										Segment_2 segment_to_add(exact_load(simplified_R[l]), exact_load(simplified_R[l + 1]));
+										if (segment_to_add.squared_length() == FT(0)) {
 											BOOST_LOG_TRIVIAL(info) << "Ignoring segment having 0 length!";
 											c_ignored_segments_count++;
 											continue;
@@ -291,15 +297,15 @@ namespace LxGeo
 			}
 
 
-			void make_rtree(const std::vector< Inexact_Segment_2 >& all_segments, Boost_RTree_2& RT)
+			void make_rtree(const std::vector< Segment_2 >& all_segments, Boost_RTree_2& RT)
 			{
 				for (size_t i = 0; i < all_segments.size(); ++i) {
-					const Inexact_Segment_2 c_segment = all_segments[i];
+					const Segment_2 c_segment = all_segments[i];
 										
-					double xmin = std::min<double>(c_segment.source().x(), c_segment.target().x());
-					double xmax = std::max<double>(c_segment.source().x(), c_segment.target().x());
-					double ymin = std::min<double>(c_segment.source().y(), c_segment.target().y());
-					double ymax = std::max<double>(c_segment.source().y(), c_segment.target().y());
+					double xmin = std::min<double>(CGAL::to_double(c_segment.source().x()), CGAL::to_double(c_segment.target().x()));
+					double xmax = std::max<double>(CGAL::to_double(c_segment.source().x()), CGAL::to_double(c_segment.target().x()));
+					double ymin = std::min<double>(CGAL::to_double(c_segment.source().y()), CGAL::to_double(c_segment.target().y()));
+					double ymax = std::max<double>(CGAL::to_double(c_segment.source().y()), CGAL::to_double(c_segment.target().y()));
 
 					Boost_Box_2 box(Boost_Point_2(xmin, ymin), Boost_Point_2(xmax, ymax));
 					RT.insert(Boost_Value_2(box, i));
@@ -344,20 +350,59 @@ namespace LxGeo
 				
 			}
 
-			void clean_invalid(OGRLayer* c_layer) {
+			std::list<OGRPolygon> apply_fix_polygon(OGRPolygon* to_fix_polygon) {
+
+				std::vector<Inexact_Point_2> exterior_ring_points = container_transform_OGRRING2vector_Points(to_fix_polygon->getExteriorRing());
+				// could be a multitude of rings if explosion happened
+				std::list<std::vector<Inexact_Point_2>> exterior_ring_fixed_pts = explose_self_intersecting_polygon(simplify_aberrant_polygon(exterior_ring_points));
+				std::list<std::vector<Inexact_Point_2>> interior_rings_fixed_pts;
+				if (exterior_ring_fixed_pts.size() == 1) {
+					for (int k = 0; k < to_fix_polygon->getNumInteriorRings(); ++k) {
+						interior_rings_fixed_pts.push_back(
+							simplify_aberrant_polygon(container_transform_OGRRING2vector_Points(to_fix_polygon->getInteriorRing(k)))
+						);
+					}
+				}
+
+				std::list<OGRPolygon> fixed_polygons_list;
+				for (std::vector<Inexact_Point_2> exploded_ring_pts : exterior_ring_fixed_pts) {					
+					OGRPolygon current_polygon;
+					OGRLinearRing copy_ring = container_transform_vector_Points2OGRRING(exploded_ring_pts);
+					current_polygon.addRing(&copy_ring);
+					for (std::vector<Inexact_Point_2> c_interior_ring : interior_rings_fixed_pts) {
+						OGRLinearRing copy_interior_ring = container_transform_vector_Points2OGRRING(c_interior_ring);
+						current_polygon.addRing(&copy_interior_ring);
+					}
+					fixed_polygons_list.push_back(current_polygon);			
+				}
+
+				
+
+				return fixed_polygons_list;
+			}
+
+			void fix_layer_invalid_geometries(OGRLayer* c_layer) {
 
 				size_t features_count = size_t(c_layer->GetFeatureCount());
+
+				std::list<OGRPolygon> polygons_to_add;
+				std::list<size_t> features_to_remove;
 
 				for (size_t c_feat_index = 0; c_feat_index < features_count; ++c_feat_index) {
 					OGRFeature* feat = c_layer->GetNextFeature();
 					if (feat == NULL) {
-						c_layer->DeleteFeature(c_feat_index);
+						//c_layer->DeleteFeature(c_feat_index);
+						features_to_remove.push_back(c_feat_index);
 						continue;
 					}
 
 					OGRGeometry* geom = feat->GetGeometryRef();
 					OGRwkbGeometryType geom_type = geom->getGeometryType();
 					if (geom_type == wkbPolygon){
+						OGRPolygon* P = dynamic_cast<OGRPolygon*>(geom);
+						std::list<OGRPolygon> fixed_Ps = apply_fix_polygon(P);
+						polygons_to_add.splice(polygons_to_add.end(), fixed_Ps);
+						features_to_remove.push_back(c_feat_index);
 						continue;
 					}
 					else if (geom_type == wkbMultiPolygon) {
@@ -367,59 +412,34 @@ namespace LxGeo
 							if (sub_geom->getGeometryType() == wkbPolygon) {
 								// get current polygon rings
 								OGRPolygon* P = dynamic_cast<OGRPolygon*>(sub_geom);
-								std::list<OGRLinearRing*> ogr_rings;
-								ogr_rings.push_back(P->getExteriorRing());
-								for (int k = 0; k < P->getNumInteriorRings(); ++k) ogr_rings.push_back(P->getInteriorRing(k));
-								//simplify current polygon rings
-								for (OGRLinearRing* c_ring : ogr_rings) { simplify_ring(c_ring); }
+								std::list<OGRPolygon> fixed_Ps = apply_fix_polygon(P);
+								polygons_to_add.splice(polygons_to_add.end(), fixed_Ps);
 
-								OGRFeature* feature = OGRFeature::CreateFeature(c_layer->GetLayerDefn());
-								feature->SetGeometry(P->clone());
-								OGRErr error = c_layer->CreateFeature(feature);
-								if (error != OGRERR_NONE) BOOST_LOG_TRIVIAL(warning) << fmt::format("Error code : {}", error);
-								OGRFeature::DestroyFeature(feature);
 							}
 						}
-						c_layer->DeleteFeature(c_feat_index);
+						features_to_remove.push_back(c_feat_index);
 						continue;
 					}
 					// delete all different from polygon and multipolygon
-					else c_layer->DeleteFeature(c_feat_index);
+					else features_to_remove.push_back(c_feat_index);
 				
 				}
+
+				// remove all selected features
+				for (size_t f_to_remove : features_to_remove) {
+					c_layer->DeleteFeature(f_to_remove);
+				}
+				// add all fixed geometries
+				for (OGRPolygon poly_to_add : polygons_to_add) {
+					OGRFeature* feature = OGRFeature::CreateFeature(c_layer->GetLayerDefn());
+					feature->SetGeometry(poly_to_add.clone());
+					OGRErr error = c_layer->CreateFeature(feature);
+					if (error != OGRERR_NONE) BOOST_LOG_TRIVIAL(warning) << fmt::format("Error code : {}", error);
+					OGRFeature::DestroyFeature(feature);
+				}
+
 			}
 
-			void simplify_ring(std::vector<Inexact_Point_2>& R, std::vector<Inexact_Point_2>& simplified_R)
-			{
-				simplified_R.reserve(R.size());
-				Inexact_Point_2 turn_m2 = R[R.size() - 2];
-				Inexact_Point_2 turn_m1 = R[R.size() - 1];
-				for (size_t c_point_idx = 0; c_point_idx < R.size(); ++c_point_idx) {
-					if (!pts_collinear_2(R[c_point_idx], turn_m1, turn_m2)) {
-						simplified_R.push_back(turn_m1);
-					}
-					turn_m2 = turn_m1;
-					turn_m1 = R[c_point_idx];
-				}
-				simplified_R.push_back(simplified_R[0]);
-				simplified_R.shrink_to_fit();
-			}
-
-			void simplify_ring(OGRLinearRing* R) {
-				OGRLinearRing temp_ring(*R);
-				R->empty();
-				Inexact_Point_2 turn_m2(temp_ring.getX(temp_ring.getNumPoints() - 2), temp_ring.getY(temp_ring.getNumPoints() - 2));
-				Inexact_Point_2 turn_m1(temp_ring.getX(temp_ring.getNumPoints() - 1), temp_ring.getY(temp_ring.getNumPoints() - 1));
-				for (size_t c_point_idx = 0; c_point_idx < temp_ring.getNumPoints(); ++c_point_idx) {
-					Inexact_Point_2 c_point(temp_ring.getX(c_point_idx), temp_ring.getY(c_point_idx));
-					if (!pts_collinear_2(c_point, turn_m1, turn_m2)) {
-						R->addPoint(&OGRPoint(turn_m1.x(), turn_m1.y()));
-					}
-					turn_m2 = turn_m1;
-					turn_m1 = c_point;
-				}
-				R->closeRings();
-			}
 
 
 			std::string overlay_union_layers(std::vector<boost::filesystem::path>& regularized_layers_path) {
@@ -430,7 +450,7 @@ namespace LxGeo
 				union_params = CSLAddString(union_params, "INPUT_PREFIX=o_");
 				union_params = CSLAddString(union_params, "METHOD_PREFIX=n_");
 				union_params = CSLAddString(union_params, "SKIP_FAILURES=YES");
-				union_params = CSLAddString(union_params, "PROMOTE_TO_MULTI=YES");
+				union_params = CSLAddString(union_params, "USE_PREPARED_GEOMETRIES=NO");
 				union_params = CSLAddString(union_params, "KEEP_LOWER_DIMENSION_GEOMETRIES=YES");
 				std::map<std::string, GDALDataset*> temp_dataset_map;
 				std::map<size_t, GDALDataset*> datasets_map;
@@ -458,22 +478,6 @@ namespace LxGeo
 
 					OGRSpatialReference* target_ref = layers_map[0]->GetSpatialRef();
 
-					//// file_path constructions
-					//boost::filesystem::path c_out_basename(fmt::format("union_{}.shp", regularized_layers_path.size()));
-					//boost::filesystem::path outdir(params->temp_dir);
-					//boost::filesystem::path c_full_path = outdir / c_out_basename;
-					//OGRLayer* first_union_layer = create_output_layer(driver, target_ref, c_full_path, temp_dataset_map);
-					//// union of first two layers
-					//OGRErr err = layers_map[0]->Union(layers_map[1], first_union_layer, union_params, NULL, NULL);
-
-					//if (err != OGRERR_NONE)
-					//{
-					//	BOOST_LOG_TRIVIAL(fatal) << "Union error of regularized layers";
-					//	CSLDestroy(union_params);
-					//	throw std::logic_error("OGR error at union step!");
-					//}
-					//first_union_layer->SyncToDisk();
-
 					OGRLayer* last_union_layer = layers_map[0];
 					for (size_t layer_index = 1; layer_index < regularized_layers_path.size(); ++layer_index) {
 						boost::filesystem::path c_out_basename(fmt::format("union_{}.shp", regularized_layers_path.size()- layer_index));
@@ -492,7 +496,7 @@ namespace LxGeo
 							CSLDestroy(union_params);
 							throw std::logic_error("OGR error at union step!");
 						}
-						clean_invalid(last_union_layer);
+						fix_layer_invalid_geometries(last_union_layer);
 						last_union_layer->SyncToDisk();
 					}
 
@@ -520,7 +524,7 @@ namespace LxGeo
 			}
 
 
-			void regularize_segments(std::vector<Inexact_Segment_2>& all_segments,
+			void regularize_segments(std::vector<Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP,
@@ -530,8 +534,8 @@ namespace LxGeo
 				std::vector<double> segment_angle;
 				segment_angle.reserve(all_segments.size());
 				for (auto& c_segment : all_segments) {
-					Inexact_Point_2 p1 = c_segment.source();
-					Inexact_Point_2 p2 = c_segment.target();
+					Inexact_Point_2 p1(CGAL::to_double(c_segment.source().x()) , CGAL::to_double((c_segment.source().y())));
+					Inexact_Point_2 p2(CGAL::to_double(c_segment.target().x()), CGAL::to_double(c_segment.target().y()));
 					double atan_val = std::atan2(p2.y() - p1.y(), p2.x() - p1.x());
 					segment_angle.push_back(fmod(atan_val, M_PI));
 				};

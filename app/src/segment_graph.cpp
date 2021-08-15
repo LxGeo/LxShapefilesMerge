@@ -24,7 +24,7 @@ namespace LxGeo
 		IK_to_EK to_exact;
 		EK_to_IK to_inexact;
 		
-		SegmentGraph::SegmentGraph(std::vector<Inexact_Segment_2>& all_segments,
+		SegmentGraph::SegmentGraph(std::vector<Segment_2>& all_segments,
 			std::vector<short int>& segment_LID,
 			std::vector<short int>& segment_PID,
 			std::vector<short int>& segment_ORDinP,
@@ -131,7 +131,7 @@ namespace LxGeo
 					//get(vertex_index_map, *ai)
 					if (_segment_LID[c_segment_index] == _segment_LID[*ai] &&
 						_segment_PID[c_segment_index] == _segment_PID[*ai] &&
-						shapefiles_merge_utils::segments_overlap_ratios(_all_segments[c_segment_index], _all_segments[*ai]) > 0.9) {
+						shapefiles_merge_utils::segments_overlap_ratios(to_inexact(_all_segments[c_segment_index]), to_inexact(_all_segments[*ai])) > 0.9) {
 						boost::remove_edge(vertex_descriptor(c_segment_index), vertex_descriptor(*ai), SG);
 					}
 				}
@@ -145,16 +145,16 @@ namespace LxGeo
 			std::vector<double>& neighborhood_distance
 		)
 		{
-			Inexact_Segment_2 c_segment = _all_segments[c_segment_index];
+			Segment_2 c_segment = _all_segments[c_segment_index];
 			// First filter (distance search)
 			std::vector<size_t> distance_neighborhood_indices;
 
 			double x_min, x_max, y_min, y_max;
 			double p1_x, p2_x, p1_y, p2_y;
-			p1_x = c_segment.source().x();
-			p2_x = c_segment.target().x();
-			p1_y = c_segment.source().y();
-			p2_y = c_segment.target().y();
+			p1_x = CGAL::to_double(c_segment.source().x());
+			p2_x = CGAL::to_double(c_segment.target().x());
+			p1_y = CGAL::to_double(c_segment.source().y());
+			p2_y = CGAL::to_double(c_segment.target().y());
 
 			x_min = std::min<double>(p1_x, p2_x) - MAX_GROUPING_DISTANCE;
 			x_max = std::max<double>(p1_x, p2_x) + MAX_GROUPING_DISTANCE;
@@ -176,11 +176,11 @@ namespace LxGeo
 			for (int i = 0; i < possible_neighbors.size(); i++) {
 
 				size_t possible_i_index = possible_neighbors[i].second;
-				Inexact_Segment_2 possible_i_segment = _all_segments[possible_i_index];
+				Segment_2 possible_i_segment = _all_segments[possible_i_index];
 
 				Boost_Segment_2 possible_i_boost_segment = Boost_Segment_2(
-					Boost_Point_2(possible_i_segment.source().x(), possible_i_segment.source().y()),
-					Boost_Point_2(possible_i_segment.target().x(), possible_i_segment.target().y())
+					Boost_Point_2(CGAL::to_double(possible_i_segment.source().x()), CGAL::to_double(possible_i_segment.source().y())),
+					Boost_Point_2(CGAL::to_double(possible_i_segment.target().x()), CGAL::to_double(possible_i_segment.target().y()))
 				);
 
 				//check distance
@@ -270,7 +270,7 @@ namespace LxGeo
 						short int segment_distance = shapefiles_merge_utils::cyclcic_order_distance(
 							_segment_ORDinP[*possible_adjacent], _segment_ORDinP[*c_element], c_element_ring_size
 						);
-						if (segment_distance == 2) {
+						if ((segment_distance % 2==0) & (segment_distance!=0)) {
 							delete_element = true;
 							break;
 						}
@@ -392,13 +392,13 @@ namespace LxGeo
 				}
 
 				for (size_t i = 0; i < _all_segments.size(); ++i) {
-					Inexact_Segment_2 S = _all_segments[i];
+					Segment_2 S = _all_segments[i];
 					OGRLineString ogr_linestring;
 										
-					const Inexact_Point_2& S1 = S.source();
-					ogr_linestring.addPoint(&OGRPoint(S1.x(), S1.y()));
-					const Inexact_Point_2& S2 = S.target();
-					ogr_linestring.addPoint(&OGRPoint(S2.x(), S2.y()));
+					const Point_2& S1 = S.source();
+					ogr_linestring.addPoint(&OGRPoint(CGAL::to_double(S1.x()), CGAL::to_double(S1.y())));
+					const Point_2& S2 = S.target();
+					ogr_linestring.addPoint(&OGRPoint(CGAL::to_double(S2.x()), CGAL::to_double(S2.y())));
 					
 					OGRFeature* feature;
 					feature = OGRFeature::CreateFeature(target_layer->GetLayerDefn());
@@ -435,14 +435,14 @@ namespace LxGeo
 			for (size_t c_groupe_idx = 1; c_groupe_idx <= groupes_count; ++c_groupe_idx)
 			{
 				try {
-					std::vector<Inexact_Segment_2*> respective_segments;
+					std::vector<Segment_2*> respective_segments;
 					get_respective_segment(c_groupe_idx, respective_segments);
 					if (respective_segments.size() <= 1) continue;
 				
-					Inexact_Line_2 fitted_line;
+					Line_2 fitted_line;
 					get_best_fitting_line_by_direction(fitted_line, respective_segments);
 					if (fitted_line.is_degenerate()) {
-						double longest_value = 0;
+						FT longest_value = FT(0);
 						for (auto segment_i : respective_segments) {
 							if (segment_i->squared_length() > longest_value) {
 								fitted_line = segment_i->supporting_line();
@@ -455,7 +455,7 @@ namespace LxGeo
 
 					for (size_t resp_idx = 0; resp_idx < respective_segments.size(); ++resp_idx) {
 
-						Inexact_Segment_2 c_segment = *(respective_segments[resp_idx]);
+						Segment_2 c_segment = *(respective_segments[resp_idx]);
 						//// creating exact points
 						//FT x, y;
 						//std::stringstream  stream_s;
@@ -472,21 +472,21 @@ namespace LxGeo
 
 						size_t idx_in_all_segs = groups_map[c_groupe_idx][resp_idx];
 
-						Inexact_Point_2 source_projected = fitted_line.projection(c_segment.source());
-						Inexact_Point_2 target_projected = fitted_line.projection(c_segment.target());
+						Point_2 source_projected = fitted_line.projection(c_segment.source());
+						Point_2 target_projected = fitted_line.projection(c_segment.target());
 						if (fitted_line.is_vertical()) {
-							source_projected = Inexact_Point_2(fitted_line.x_at_y(source_projected.y()), source_projected.y());
-							target_projected = Inexact_Point_2(fitted_line.x_at_y(target_projected.y()), target_projected.y());
+							source_projected = Point_2(fitted_line.x_at_y(source_projected.y()), source_projected.y());
+							target_projected = Point_2(fitted_line.x_at_y(target_projected.y()), target_projected.y());
 						}
 						else {
-							source_projected = Inexact_Point_2(source_projected.x(), fitted_line.y_at_x(source_projected.x()));
-							target_projected = Inexact_Point_2(target_projected.x(), fitted_line.y_at_x(target_projected.x()));
+							source_projected = Point_2(source_projected.x(), fitted_line.y_at_x(source_projected.x()));
+							target_projected = Point_2(target_projected.x(), fitted_line.y_at_x(target_projected.x()));
 						}
 
 						//FT::set_relative_precision_of_to_double(PREC);
 						//Inexact_Point_2 source_projected(CGAL::to_double(exact_source_projected.x()), CGAL::to_double(exact_source_projected.y()));  //to_inexact(exact_source_projected); //
 						//Inexact_Point_2 target_projected(CGAL::to_double(exact_target_projected.x()), CGAL::to_double(exact_target_projected.y())); //to_inexact(exact_target_projected); //
-						_all_segments[idx_in_all_segs] = Inexact_Segment_2(source_projected, target_projected);
+						_all_segments[idx_in_all_segs] = Segment_2(source_projected, target_projected);
 					}
 
 				}
@@ -499,7 +499,7 @@ namespace LxGeo
 			}
 		}
 
-		void SegmentGraph::get_respective_segment(size_t groupe_idx, std::vector<Inexact_Segment_2*>& respective_segments)
+		void SegmentGraph::get_respective_segment(size_t groupe_idx, std::vector<Segment_2*>& respective_segments)
 		{
 			std::vector<size_t> respective_segments_indices = groups_map[groupe_idx];
 			for (size_t idx = 0; idx < respective_segments_indices.size(); ++idx)
@@ -507,8 +507,8 @@ namespace LxGeo
 				respective_segments.push_back(&(_all_segments[respective_segments_indices[idx]]));
 			}
 		}
-
-		void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments)
+		/*
+		void SegmentGraph::get_best_fitting_line(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments)
 		{
 			// init 1 weighted vector
 			std::vector<size_t> segments_weights(respective_segments.size(), 1);
@@ -522,9 +522,9 @@ namespace LxGeo
 			}
 
 		}
-		void SegmentGraph::get_best_fitting_line(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights)
+		void SegmentGraph::get_best_fitting_line(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments, std::vector<size_t>& segments_weights)
 		{
-			std::list<Inexact_Segment_2> all_segments;
+			std::list<Segment_2> all_segments;
 			//test only
 			assert(respective_segments.size() == segments_weights.size());
 			// fill all_points with repetition (based on weights)
@@ -539,8 +539,8 @@ namespace LxGeo
 			CGAL::linear_least_squares_fitting_2(all_segments.begin(), all_segments.end(), fitted_line, CGAL::Dimension_tag<0>());
 
 		}
-
-		void SegmentGraph::get_best_fitting_line_by_direction(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments) {
+		*/
+		void SegmentGraph::get_best_fitting_line_by_direction(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments) {
 			std::vector<size_t> segments_weights(respective_segments.size(), 1);
 			if (respective_segments.size() == 1)
 			{
@@ -551,33 +551,35 @@ namespace LxGeo
 				get_best_fitting_line_by_direction(fitted_line, respective_segments, segments_weights);
 			}
 		}
-		void SegmentGraph::get_best_fitting_line_by_direction(Inexact_Line_2& fitted_line, std::vector<Inexact_Segment_2*>& respective_segments, std::vector<size_t>& segments_weights) {
+		void SegmentGraph::get_best_fitting_line_by_direction(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments, std::vector<size_t>& segments_weights) {
 
 			// common vector creation
-			Inexact_Vector_2 common_vector = segments_weights[0] * respective_segments[0]->to_vector();
+			Vector_2 common_vector = FT(segments_weights[0]) * respective_segments[0]->to_vector();
 			// get weighted vector in the same direction
 			for (size_t c_seg_index = 1; c_seg_index < respective_segments.size(); ++c_seg_index) {
-				Inexact_Segment_2* c_segment = respective_segments[c_seg_index];
-				size_t c_weight = segments_weights[c_seg_index];
-				Inexact_Vector_2 c_vector = c_segment->to_vector();
+				Segment_2* c_segment = respective_segments[c_seg_index];
+				FT c_weight = FT(segments_weights[c_seg_index]);
+				Vector_2 c_vector = c_segment->to_vector();
 				c_vector = (common_vector*c_vector)>0 ? c_vector : -c_vector;
 				common_vector += c_vector * c_weight;
 			}
 
 			// get passage point on common normal
-			Inexact_Line_2 normal_line_of_projection(Inexact_Point_2(0, 0), common_vector.perpendicular(CGAL::Sign::POSITIVE));
-			double sum_x=0, sum_y=0, sum_weight=0;
+			Line_2 normal_line_of_projection(Point_2(0, 0), common_vector.perpendicular(CGAL::Sign::POSITIVE));
+			FT sum_x(0), sum_y(0), sum_weight(0);
 			for (size_t c_seg_index = 0; c_seg_index < respective_segments.size(); ++c_seg_index) {
-				Inexact_Segment_2* c_segment = respective_segments[c_seg_index];
-				double c_segment_sq_length = c_segment->squared_length();
-				size_t c_weight = segments_weights[c_seg_index];
-				Inexact_Point_2 seg_source_projected = normal_line_of_projection.projection(c_segment->source());
+				Segment_2* c_segment = respective_segments[c_seg_index];
+				FT c_segment_sq_length = c_segment->squared_length();
+				FT c_weight = segments_weights[c_seg_index];
+				Point_2 seg_source_projected = normal_line_of_projection.projection(c_segment->source());
 				sum_x += c_segment_sq_length * c_weight * seg_source_projected.x();
 				sum_y += c_segment_sq_length * c_weight * seg_source_projected.y();
 				sum_weight += c_segment_sq_length* c_weight;
 			}
 
-			fitted_line = Inexact_Line_2(Inexact_Point_2(sum_x/sum_weight, sum_y/sum_weight), common_vector);
+			FT mean_x = (sum_x / sum_weight);
+			FT mean_y = sum_y / sum_weight;
+			fitted_line = Line_2(Point_2( mean_x, mean_y), common_vector);
 
 		}
 
@@ -593,7 +595,7 @@ namespace LxGeo
 				initial_ring_vector.reserve(ring.getNumPoints());
 				simplified_ring_vector.reserve(ring.getNumPoints());
 				for (const OGRPoint& ring_point : ring) initial_ring_vector.push_back(Inexact_Point_2(ring_point.getX(), ring_point.getY()));
-				shapefiles_merge_utils::simplify_ring(initial_ring_vector, simplified_ring_vector);
+				simplified_ring_vector = simplify_aberrant_polygon(initial_ring_vector);
 				OGRLinearRing copy_ring;
 				for (const Inexact_Point_2& c_point : simplified_ring_vector) copy_ring.addPoint(&OGRPoint(c_point.x(), c_point.y()));
 				if (copy_ring.getNumPoints() > 2)	current_polygon.addRing(&copy_ring);
@@ -612,29 +614,28 @@ namespace LxGeo
 			}
 		}
 
-		void get_consecutive_segments_connection_point(const Inexact_Segment_2& seg1, const Inexact_Segment_2& seg2, std::vector<Inexact_Point_2>& connection_points) {
+		void get_consecutive_segments_connection_point(const Segment_2& seg1, const Segment_2& seg2, std::vector<Point_2>& connection_points) {
 			
 
 			// if almost parralel connect endings
-			Line_2 s_line1 = to_exact(seg1.supporting_line());
-			Line_2 s_line2 = to_exact(seg2.supporting_line());
-			Inexact_Vector_2 s_vector_1 = seg1.to_vector();
-			s_vector_1 = s_vector_1 / sqrt(s_vector_1.squared_length());
-			Inexact_Vector_2 s_vector_2 = seg2.to_vector();
-			s_vector_2 = s_vector_2 / sqrt(s_vector_2.squared_length());
-			double cross_product = s_vector_1 * s_vector_2;//CGAL::to_double(E_cross_product);
+			Line_2 s_line1 = seg1.supporting_line();
+			Line_2 s_line2 = seg2.supporting_line();
+			Vector_2 s_vector_1 = seg1.to_vector();
+			s_vector_1 = s_vector_1 / FT(CGAL::sqrt(CGAL::to_double(s_vector_1.squared_length())));
+			Vector_2 s_vector_2 = seg2.to_vector();
+			s_vector_2 = s_vector_2 / FT(CGAL::sqrt(CGAL::to_double(s_vector_2.squared_length())));
+			double cross_product = CGAL::to_double(s_vector_1 * s_vector_2);//CGAL::to_double(E_cross_product);
 			double diff_angle = acos(cross_product);
 			double angle_mod = asin(sqrt(sin(diff_angle) * sin(diff_angle)));
 
 			if (angle_mod>(10*M_PI/180)){
-				Inexact_Point_2 connection_point;
 				Point_2 exact_connection_point;
 				auto result = CGAL::intersection(s_line1, s_line2);
 				if (result) {
 
 					if (assign(exact_connection_point, result)) {
 						//intersection is a point
-						connection_points.push_back(to_inexact(exact_connection_point));
+						connection_points.push_back(exact_connection_point);
 					}
 					else {
 						// intersection is a line
@@ -744,8 +745,7 @@ namespace LxGeo
 						}
 
 						// adding point to rings (in all cases)
-						Inexact_Point_2 s1_target = _all_segments[current_segment_index].target();
-						Inexact_Segment_2 next_segment_in_polygon;
+						Segment_2 next_segment_in_polygon;
 						// below is to assure next segment is in the same polygon
 						if (_segment_ORDinP[current_segment_index + 1] != 0) next_segment_in_polygon = _all_segments[current_segment_index + 1];
 						else {
@@ -757,19 +757,21 @@ namespace LxGeo
 						//Inexact_Point_2 projected_point = next_segment_in_polygon.supporting_line().projection(s1_target);
 						//current_ring.addPoint(&OGRPoint(projected_point.x(), projected_point.y()));
 
-						std::vector<Inexact_Point_2> connection_points;
+						std::vector<Point_2> connection_points;
 						connection_points.reserve(2);
 						
 						get_consecutive_segments_connection_point(_all_segments[current_segment_index], next_segment_in_polygon, connection_points);						
-												
-						for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(connection_point.x(), connection_point.y()));
+						
+						FT::set_relative_precision_of_to_double(Constants::PREC);
+						for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(CGAL::to_double(connection_point.x()), CGAL::to_double(connection_point.y())));
 					}
 
 					//add last polygon
-					Inexact_Segment_2 next_segment_in_polygon = _all_segments[_all_segments.size()-1 - _segment_ORDinP[_all_segments.size()-1]];
-					std::vector<Inexact_Point_2> connection_points;
+					Segment_2 next_segment_in_polygon = _all_segments[_all_segments.size()-1 - _segment_ORDinP[_all_segments.size()-1]];
+					std::vector<Point_2> connection_points;
 					get_consecutive_segments_connection_point(_all_segments[_all_segments.size() - 1], next_segment_in_polygon, connection_points);
-					for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(connection_point.x(), connection_point.y()));
+					FT::set_relative_precision_of_to_double(Constants::PREC);
+					for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(CGAL::to_double(connection_point.x()), CGAL::to_double(connection_point.y())));
 					ex_int_rings.push_back(OGRLinearRing(current_ring));
 					add_polygon_to_layer(ex_int_rings, outlayers_datasets_map[_segment_LID[_all_segments.size()-1]]->GetLayer(0), _all_segments.size()-1);
 
@@ -781,7 +783,7 @@ namespace LxGeo
 			}
 			for (auto out_dataset = outlayers_datasets_map.begin(); out_dataset != outlayers_datasets_map.end(); ++out_dataset) {
 				//shapefiles_merge_utils::clean_invalid(out_dataset->second->GetLayer(0));
-				//out_dataset->second->GetLayer(0)->SyncToDisk();
+				out_dataset->second->GetLayer(0)->SyncToDisk();
 			}
 			if (source_dataset != NULL) GDALClose(source_dataset);
 			for (auto out_dataset = outlayers_datasets_map.begin(); out_dataset != outlayers_datasets_map.end(); ++out_dataset) {

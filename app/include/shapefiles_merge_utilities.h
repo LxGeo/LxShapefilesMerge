@@ -24,14 +24,14 @@ namespace LxGeo
 			int check_shapefiles_validity(std::vector<std::string>& all_paths, bool& apply_srs_transform);
 
 			void load_segments_data(std::vector<std::string>& all_paths,
-				std::vector<Inexact_Segment_2>& all_segments,
+				std::vector<Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP,
 				std::vector<short int>& segment_RRSize,
 				const bool apply_srs_transform);
 
-			void regularize_segments(std::vector<Inexact_Segment_2>& all_segments,
+			void regularize_segments(std::vector<Segment_2>& all_segments,
 				std::vector<short int>& segment_LID,
 				std::vector<short int>& segment_PID,
 				std::vector<short int>& segment_ORDinP,
@@ -43,11 +43,7 @@ namespace LxGeo
 
 			double segments_overlap_ratios(const Inexact_Segment_2& segment1, const Inexact_Segment_2& segment2);
 
-			void clean_invalid(OGRLayer* c_layer);
-
-			void simplify_ring(std::vector<Inexact_Point_2>& R, std::vector<Inexact_Point_2>& simplified_R);
-
-			void simplify_ring(OGRLinearRing* R);
+			void fix_layer_invalid_geometries(OGRLayer* c_layer);
 
 			void read_shapefiles(const std::vector<std::string>& all_paths, std::vector<std::vector<std::vector<std::vector<Inexact_Point_2> > > >& all_polygons);
 

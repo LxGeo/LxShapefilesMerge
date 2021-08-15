@@ -44,7 +44,7 @@ namespace LxGeo
 
 			// Loading polygons as segments (to run regularization)
 
-			std::vector<Inexact_Segment_2> all_segments;
+			std::vector<Segment_2> all_segments;
 			// segment_LID contains segments respective layer ID
 			std::vector<short int> segment_LID;
 			// segment_PID contains segments respective polygon ID
