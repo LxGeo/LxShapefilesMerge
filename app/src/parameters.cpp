@@ -8,6 +8,7 @@ namespace LxGeo
 		{
 			init();
 			parse(argc, argv);
+			post_parse();
 			
 		}
 
@@ -37,8 +38,8 @@ namespace LxGeo
 			temp_dir = "temp_dir";
 
 
-			MAX_GROUPING_DISTANCE = 1;
-			MAX_GROUPING_ANGLE_DEG = 5;
+			MAX_GROUPING_DISTANCE = 2;
+			MAX_GROUPING_ANGLE_DEG = 3;
 			MIN_SEG_OVERLAP_RATIO = 0.1;
 			e_distance_weight=0.5;
 			e_angle_weight=0.5;
@@ -47,6 +48,12 @@ namespace LxGeo
 			os_lambda_c = 1;
 		}
 
+		void Parameters::post_parse() {
+
+			if (edge_diff_layer_weights.empty()) {
+				edge_diff_layer_weights = std::vector<size_t>(paths.size(), 1);
+			}
+		}
 
 		void Parameters::help()
 		{

@@ -9,6 +9,7 @@
 #include "segment_graph.h"
 #include <boost/filesystem.hpp>
 #include <fmt/core.h>
+#include "geometry_lab.h"
 
 namespace LxGeo
 {
@@ -209,7 +210,9 @@ namespace LxGeo
 
 						size_t n = size_t(layer->GetFeatureCount());
 
+						tqdm bar;
 						for (size_t j = 0; j < n; ++j) {
+							bar.progress(j, n);
 							OGRFeature* feat = layer->GetNextFeature();
 							if (feat == NULL) continue;
 
@@ -239,10 +242,12 @@ namespace LxGeo
 									R.shrink_to_fit();
 
 									//simplify edge
-									std::vector<Inexact_Point_2> simplified_R = simplify_aberrant_polygon(R);
+									std::vector<Inexact_Point_2> simplified_R = simplify_aberrant_ring(R.begin(), R.end());
 									
-									if (simplified_R.size() < 3)
-										BOOST_LOG_TRIVIAL(debug) << "oversimplify " << i << "" << j;
+									if (simplified_R.size() < 3) {
+										//BOOST_LOG_TRIVIAL(debug) << "oversimplify " << i << "" << j;
+										continue;
+									}
 									/*std::vector<Inexact_Point_2> simplified_R;
 									simplify_ring(R, simplified_R);*/
 
@@ -269,7 +274,7 @@ namespace LxGeo
 
 							}
 						}
-
+						bar.finish();
 						// Step 3.
 						// Reading is over, closes the dataset
 						if (i != 0) GDALClose(dataset);
@@ -354,12 +359,13 @@ namespace LxGeo
 
 				std::vector<Inexact_Point_2> exterior_ring_points = container_transform_OGRRING2vector_Points(to_fix_polygon->getExteriorRing());
 				// could be a multitude of rings if explosion happened
-				std::list<std::vector<Inexact_Point_2>> exterior_ring_fixed_pts = explose_self_intersecting_polygon(simplify_aberrant_polygon(exterior_ring_points));
+				std::list<std::vector<Inexact_Point_2>> exterior_ring_fixed_pts = explose_self_intersecting_polygon(simplify_aberrant_ring(exterior_ring_points.begin(), exterior_ring_points.end()));
 				std::list<std::vector<Inexact_Point_2>> interior_rings_fixed_pts;
 				if (exterior_ring_fixed_pts.size() == 1) {
 					for (int k = 0; k < to_fix_polygon->getNumInteriorRings(); ++k) {
+						auto int_ring = container_transform_OGRRING2vector_Points(to_fix_polygon->getInteriorRing(k));
 						interior_rings_fixed_pts.push_back(
-							simplify_aberrant_polygon(container_transform_OGRRING2vector_Points(to_fix_polygon->getInteriorRing(k)))
+							simplify_aberrant_ring(int_ring.begin(), int_ring.end())
 						);
 					}
 				}
@@ -374,10 +380,35 @@ namespace LxGeo
 						current_polygon.addRing(&copy_interior_ring);
 					}
 					fixed_polygons_list.push_back(current_polygon);			
+				}				
+
+				return fixed_polygons_list;
+			}
+
+			std::list<OGRPolygon> apply_fix_polygon_temp(OGRPolygon* to_fix_polygon) {
+
+				OGRPolygon current_polygon;
+
+				std::vector<Inexact_Point_2> exterior_ring_points = container_transform_OGRRING2vector_Points(to_fix_polygon->getExteriorRing());
+				std::vector<Inexact_Point_2> exterior_ring_fixed_pts = simplify_aberrant_ring(exterior_ring_points.begin(), exterior_ring_points.end());
+				OGRLinearRing copy_ring = container_transform_vector_Points2OGRRING(exterior_ring_points);
+				current_polygon.addRing(&copy_ring);
+
+				std::list<std::vector<Inexact_Point_2>> interior_rings_fixed_pts;
+				for (int k = 0; k < to_fix_polygon->getNumInteriorRings(); ++k) {
+					auto inner_ring = container_transform_OGRRING2vector_Points(to_fix_polygon->getInteriorRing(k));
+					interior_rings_fixed_pts.push_back(
+						simplify_aberrant_ring(inner_ring.begin(), inner_ring.end())
+					);
 				}
 
-				
+				for (std::vector<Inexact_Point_2> c_interior_ring : interior_rings_fixed_pts) {
+					OGRLinearRing copy_interior_ring = container_transform_vector_Points2OGRRING(c_interior_ring);
+					current_polygon.addRing(&copy_interior_ring);
+				}
 
+				std::list<OGRPolygon> fixed_polygons_list;
+				fixed_polygons_list.push_back(current_polygon);
 				return fixed_polygons_list;
 			}
 
@@ -400,7 +431,7 @@ namespace LxGeo
 					OGRwkbGeometryType geom_type = geom->getGeometryType();
 					if (geom_type == wkbPolygon){
 						OGRPolygon* P = dynamic_cast<OGRPolygon*>(geom);
-						std::list<OGRPolygon> fixed_Ps = apply_fix_polygon(P);
+						std::list<OGRPolygon> fixed_Ps = apply_fix_polygon_temp(P);
 						polygons_to_add.splice(polygons_to_add.end(), fixed_Ps);
 						features_to_remove.push_back(c_feat_index);
 						continue;
@@ -412,7 +443,7 @@ namespace LxGeo
 							if (sub_geom->getGeometryType() == wkbPolygon) {
 								// get current polygon rings
 								OGRPolygon* P = dynamic_cast<OGRPolygon*>(sub_geom);
-								std::list<OGRPolygon> fixed_Ps = apply_fix_polygon(P);
+								std::list<OGRPolygon> fixed_Ps = apply_fix_polygon_temp(P);
 								polygons_to_add.splice(polygons_to_add.end(), fixed_Ps);
 
 							}
@@ -438,6 +469,7 @@ namespace LxGeo
 					OGRFeature::DestroyFeature(feature);
 				}
 
+				c_layer->ResetReading();
 			}
 
 
@@ -465,7 +497,7 @@ namespace LxGeo
 					}
 					BOOST_LOG_TRIVIAL(debug) << e.what();
 					BOOST_LOG_TRIVIAL(fatal) << "Fatal error! For a quick resolution keep a copy of input data!";
-					return NULL;
+					return "";
 				}
 
 				try {
@@ -510,7 +542,7 @@ namespace LxGeo
 					}
 					BOOST_LOG_TRIVIAL(debug) << e.what();
 					BOOST_LOG_TRIVIAL(fatal) << "Fatal error! For a quick resolution keep a copy of input data!";
-					return NULL;
+					return "";
 				}
 
 				for (auto out_dataset = datasets_map.begin(); out_dataset != datasets_map.end(); ++out_dataset) {
@@ -569,7 +601,7 @@ namespace LxGeo
 
 				try {
 					// Gets a spatial reference
-					dataset_ref = (GDALDataset*)GDALOpenEx(all_paths[0].c_str(), GDAL_OF_VECTOR, NULL, NULL, NULL);
+					dataset_ref = (GDALDataset*)GDALOpenEx(all_paths[0].c_str(), GDAL_OF_VECTOR | GDAL_OF_UPDATE, NULL, NULL, NULL);
 					if (dataset_ref == NULL) {
 						throw std::ios_base::failure("Error : unable to load shapefile.");
 					}
@@ -600,7 +632,7 @@ namespace LxGeo
 
 			void read_single_shapefile(std::string shapefile_path, OGRSpatialReference* target_ref, std::vector<std::vector<std::vector<Inexact_Point_2> > >& polygons) {
 				GDALDataset* dataset = NULL;
-				dataset = (GDALDataset*)GDALOpenEx(shapefile_path.c_str(), GDAL_OF_VECTOR, NULL, NULL, NULL);
+				dataset = (GDALDataset*)GDALOpenEx(shapefile_path.c_str(), GDAL_OF_VECTOR | GDAL_OF_UPDATE, NULL, NULL, NULL);
 				read_single_shapefile(dataset, target_ref, polygons);
 				// Reading is over, closes the dataset
 				GDALClose(dataset);
@@ -616,6 +648,8 @@ namespace LxGeo
 				}
 
 				OGRLayer* layer = dataset->GetLayer(0);
+				fix_layer_invalid_geometries(layer);
+				layer->SyncToDisk();
 				OGRSpatialReference* source_ref = layer->GetSpatialRef();
 				OGRCoordinateTransformation* CT = OGRCreateCoordinateTransformation(source_ref, (target_ref==NULL)? source_ref : target_ref);
 
@@ -645,7 +679,7 @@ namespace LxGeo
 							int ring_size = ring->getNumPoints();
 
 							R.reserve(ring_size);
-							for (int u = 0; u < ring_size - 1; ++u) {
+							for (int u = 0; u < ring_size ; ++u) { //-1
 								OGRPoint pt;
 								ring->getPoint(u, &pt);
 								double x = pt.getX(), y = pt.getY();

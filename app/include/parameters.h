@@ -19,6 +19,8 @@ namespace LxGeo
 		protected:
 			void init();
 
+			void post_parse();
+
 			void help();
 
 			void parse(int argc, char* argv[]);
@@ -45,6 +47,8 @@ namespace LxGeo
 			double os_lambda_v;
 			double os_lambda_c;
 			std::vector<boost::filesystem::path> regularized_layers_path;
+
+			std::vector<size_t> edge_diff_layer_weights;
 
 		};
 

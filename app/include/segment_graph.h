@@ -29,43 +29,45 @@ namespace LxGeo
 
 			void fill_graph();
 
-			void SegmentGraph::get_neighborhood_segments_indices_weights(size_t c_segment_index,
+			void get_neighborhood_segments_indices_weights(size_t c_segment_index,
 				std::vector<size_t>& neighborhood_indices,
 				std::vector<double>& neighborhood_weights,
 				std::vector<double>& neighborhood_distance
 			);
 
-			void SegmentGraph::fix_n2_consecutive_segments();
+			void fix_n2_consecutive_segments();
 
-			void SegmentGraph::cluster_segments();
+			void cluster_segments();
 
-			size_t SegmentGraph::get_min_centrality_vertex_index();
+			vertex_descriptor get_min_centrality_vertex_index();
 
-			void SegmentGraph::get_connected_vertices_indices(size_t vertex_idx, std::vector<size_t>& c_connected_vertices_indices);
+			vertex_descriptor get_high_degree_vertex_index();
 
-			void SegmentGraph::filter_same_polygon_adjacent_indices(std::list<size_t>& c_connected_vertices_indices);
+			void get_connected_vertices_indices(vertex_descriptor vertex_idx, std::vector<vertex_descriptor>& c_connected_vertices_indices);
 
-			size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices);
+			void filter_same_polygon_adjacent_indices(std::set<vertex_descriptor>& c_connected_vertices_indices);
 
-			void SegmentGraph::delete_vertex_related(size_t vertex_idx);
+			size_t create_segment_group(size_t c_group_id, std::vector<vertex_descriptor> c_connected_vertices_indices);
 
-			void SegmentGraph::write_grouped_segments_shapefile( const std::string& output_filename);
+			void delete_vertex_related(size_t vertex_idx);
 
-			void SegmentGraph::fuse_segments();
+			void write_grouped_segments_shapefile( const std::string& output_filename);
 
-			void SegmentGraph::get_respective_segment(size_t groupe_idx, std::vector<Segment_2*>& respective_segments);
+			void fuse_segments();
 
-			void SegmentGraph::get_best_fitting_line(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments);
+			void get_respective_segment(size_t groupe_idx, std::vector<Segment_2*>& respective_segments);
+
+			void get_best_fitting_line(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments);
 			
-			void SegmentGraph::get_best_fitting_line(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
+			void get_best_fitting_line(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
 
-			void SegmentGraph::get_best_fitting_line_by_direction(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments);
+			void get_best_fitting_line_by_direction(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments);
 
-			void SegmentGraph::get_best_fitting_line_by_direction(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
+			void get_best_fitting_line_by_direction(Line_2& fitted_line, std::vector<Segment_2*>& respective_segments, std::vector<size_t>& segments_weights);
 
-			void SegmentGraph::add_polygon_to_layer(std::list<OGRLinearRing>& ex_int_rings, OGRLayer* current_dataset_layer, size_t current_segment_index);
+			void add_polygon_to_layer(std::list<OGRLinearRing>& ex_int_rings, OGRLayer* current_dataset_layer, size_t current_segment_index);
 
-			void SegmentGraph::reconstruct_polygons(const std::string& temp_dir);
+			void reconstruct_polygons(const std::string& temp_dir);
 
 		public:
 			BoostSegmentGraph SG = BoostSegmentGraph(10);
@@ -84,7 +86,7 @@ namespace LxGeo
 			Boost_RTree_2 _segments_tree;
 			size_t groupes_count;
 			std::vector<double> vertcies_centrality;
-			std::map<size_t, std::vector<size_t>> groups_map;
+			std::map<size_t, std::vector<vertex_descriptor>> groups_map;
 		public:
 			std::vector<size_t> vertcies_groups;
 		};

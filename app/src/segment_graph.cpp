@@ -14,6 +14,7 @@
 #include <gdal_priv.h>
 #include <ogrsf_frmts.h>
 #include <CGAL/exceptions.h>
+#include "geometry_lab.h"
 
 
 namespace LxGeo
@@ -57,10 +58,10 @@ namespace LxGeo
 
 			vertcies_centrality = std::vector<double>(_all_segments.size());
 
-
+			tqdm bar;
 			for (size_t c_segment_index=0; c_segment_index <_all_segments.size(); ++c_segment_index)
 			{
-
+				bar.progress(c_segment_index, _all_segments.size());
 				std::vector<size_t> neighborhood_indices;
 				std::vector<double> neighborhood_weights;
 				std::vector<double> neighborhood_distance;
@@ -111,7 +112,7 @@ namespace LxGeo
 				//centrality_map[c_segment_index] = normalized_centrality_value;
 				vertcies_centrality[c_segment_index]= normalized_centrality_value;
 			}
-
+			bar.finish();
 			//fix_n2_consecutive_segments();
 		}
 
@@ -129,9 +130,10 @@ namespace LxGeo
 				adjacency_iterator ai, ai_end;
 				for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_descriptor(c_segment_index), SG); ai != ai_end; ++ai) {
 					//get(vertex_index_map, *ai)
-					if (_segment_LID[c_segment_index] == _segment_LID[*ai] &&
-						_segment_PID[c_segment_index] == _segment_PID[*ai] &&
-						shapefiles_merge_utils::segments_overlap_ratios(to_inexact(_all_segments[c_segment_index]), to_inexact(_all_segments[*ai])) > 0.9) {
+					size_t vertex_idx = vertex_index_map[*ai];
+					if (_segment_LID[c_segment_index] == _segment_LID[vertex_idx] &&
+						_segment_PID[c_segment_index] == _segment_PID[vertex_idx] &&
+						shapefiles_merge_utils::segments_overlap_ratios(to_inexact(_all_segments[c_segment_index]), to_inexact(_all_segments[vertex_idx])) > 0.9) {
 						boost::remove_edge(vertex_descriptor(c_segment_index), vertex_descriptor(*ai), SG);
 					}
 				}
@@ -178,6 +180,10 @@ namespace LxGeo
 				size_t possible_i_index = possible_neighbors[i].second;
 				Segment_2 possible_i_segment = _all_segments[possible_i_index];
 
+				if ((c_segment_index == 64 & possible_i_index == 77) | (c_segment_index == 77 & possible_i_index == 64)) {
+					BOOST_LOG_TRIVIAL(debug) << "Check";
+				}
+
 				Boost_Segment_2 possible_i_boost_segment = Boost_Segment_2(
 					Boost_Point_2(CGAL::to_double(possible_i_segment.source().x()), CGAL::to_double(possible_i_segment.source().y())),
 					Boost_Point_2(CGAL::to_double(possible_i_segment.target().x()), CGAL::to_double(possible_i_segment.target().y()))
@@ -193,7 +199,10 @@ namespace LxGeo
 					if (diff_angle < MAX_GROUPING_ANGLE_RAD)
 					{
 						//segment overlap ratios filter
-						//if (shapefiles_merge_utils::segments_overlap_ratios(c_segment, possible_i_segment) < params->MIN_SEG_OVERLAP_RATIO) continue;
+						Inexact_Segment_2 c_segment_inexact, possible_i_segment_inexact;
+						c_segment_inexact = to_inexact(c_segment);
+						possible_i_segment_inexact = to_inexact(possible_i_segment);
+						if (shapefiles_merge_utils::segments_overlap_ratios(c_segment_inexact, possible_i_segment_inexact) < params->MIN_SEG_OVERLAP_RATIO) continue;
 						
 						neighborhood_indices.push_back(possible_i_index);
 						neighborhood_distance.push_back(diff_distance);
@@ -212,12 +221,13 @@ namespace LxGeo
 			
 			size_t grouped_vertcies_count = 0;
 
-			
+			tqdm bar;
 			while (grouped_vertcies_count < _all_segments.size()) {
+				bar.progress(grouped_vertcies_count, _all_segments.size());
 				// Search for minimum centrality_index as a starting group central segment
 				
-				size_t c_central_vertex_node = get_min_centrality_vertex_index();
-				std::vector<size_t> c_connected_vertices_indices;
+				vertex_descriptor c_central_vertex_node = get_min_centrality_vertex_index();
+				std::vector<vertex_descriptor> c_connected_vertices_indices;
 				
 				get_connected_vertices_indices(c_central_vertex_node, c_connected_vertices_indices);
 
@@ -227,23 +237,46 @@ namespace LxGeo
 				groupes_count++;
 
 			}
-
+			bar.finish();
 
 		}
 
-		size_t SegmentGraph::get_min_centrality_vertex_index()
+		vertex_descriptor SegmentGraph::get_min_centrality_vertex_index()
 		{
-			return std::min_element(vertcies_centrality.begin(), vertcies_centrality.end()) - vertcies_centrality.begin();
+			return vertex_descriptor(std::min_element(vertcies_centrality.begin(), vertcies_centrality.end()) - vertcies_centrality.begin());
 		}
 
-		void SegmentGraph::get_connected_vertices_indices(size_t vertex_idx, std::vector<size_t>& c_connected_vertices_indices) {
+		vertex_descriptor SegmentGraph::get_high_degree_vertex_index()
+		{
+			vertex_iterator vi, vi_end;
+			boost::tie(vi, vi_end) = boost::vertices(SG);
+			vertex_descriptor highest_degree_vertex = *vi;
+			size_t highest_degree = boost::out_degree(highest_degree_vertex, SG);
+			for (auto next = vi; vi != vi_end; vi = next) {
+				++next;
+				size_t c_vertex_degrees = boost::out_degree(*next, SG);
+				if (c_vertex_degrees > highest_degree) {
+					highest_degree_vertex = *next;
+					highest_degree = c_vertex_degrees;
+				}
+			}
 
-			std::list<size_t> full_vertices_indices;
+			return highest_degree_vertex;
+		}
 
-			full_vertices_indices.push_back( vertex_idx );
+		void SegmentGraph::get_connected_vertices_indices(vertex_descriptor vertex_idx, std::vector<vertex_descriptor>& c_connected_vertices_indices) {
+
+			std::set<vertex_descriptor> full_vertices_indices;
+
+			full_vertices_indices.insert( vertex_idx );
 			adjacency_iterator ai, ai_end;
 			for (tie(ai, ai_end) = boost::adjacent_vertices(vertex_descriptor(vertex_idx), SG); ai != ai_end; ++ai) {
-				full_vertices_indices.push_back(*ai);
+				full_vertices_indices.insert(*ai);
+				adjacency_iterator sec_ai, sec_ai_end;
+				for (tie(sec_ai, sec_ai_end) = boost::adjacent_vertices(vertex_descriptor(*ai), SG); sec_ai != sec_ai_end; ++sec_ai) {
+					full_vertices_indices.insert(*sec_ai);
+				}
+
 			}
 
 			filter_same_polygon_adjacent_indices(full_vertices_indices);
@@ -252,23 +285,27 @@ namespace LxGeo
 				
 		}
 
-		void SegmentGraph::filter_same_polygon_adjacent_indices(std::list<size_t>& c_connected_vertices_indices) {
+		void SegmentGraph::filter_same_polygon_adjacent_indices(std::set<vertex_descriptor>& c_connected_vertices_indices) {
 
+			boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
+				boost::get(boost::vertex_index, SG);
 			// start from second element
 			for (auto possible_adjacent = std::next(c_connected_vertices_indices.begin()); possible_adjacent != c_connected_vertices_indices.end(); ++possible_adjacent) {
+				size_t possible_adjacent_idx = vertex_index_map[*possible_adjacent];
 				bool delete_element = false;
 				for (auto c_element = c_connected_vertices_indices.begin(); c_element != c_connected_vertices_indices.end(); ++c_element) {
 					// check if possible adjacent is in the same LID & same PID 
 					/*if (_segment_LID[*c_element] == 0 && _segment_PID[*c_element] == 27 && _segment_ORDinP[*c_element] == 14)
 						BOOST_LOG_TRIVIAL(debug) << "check this";*/
-					if ((_segment_LID[*c_element] == _segment_LID[*possible_adjacent]) & (_segment_PID[*c_element] == _segment_PID[*possible_adjacent])) {
+					size_t c_element_idx = vertex_index_map[*c_element];
+					if ((_segment_LID[c_element_idx] == _segment_LID[possible_adjacent_idx]) & (_segment_PID[c_element_idx] == _segment_PID[possible_adjacent_idx])) {
 						// check if part of same ring
-						const size_t& c_element_ring_size = _segment_RRSize[*c_element];
-						const size_t& possible_adjacent_ring_size = _segment_RRSize[*possible_adjacent];
+						const size_t& c_element_ring_size = _segment_RRSize[c_element_idx];
+						const size_t& possible_adjacent_ring_size = _segment_RRSize[possible_adjacent_idx];
 						if (c_element_ring_size != possible_adjacent_ring_size) continue;
 						//check if OrdIP difference is different than 2 // modulos polygon size
 						short int segment_distance = shapefiles_merge_utils::cyclcic_order_distance(
-							_segment_ORDinP[*possible_adjacent], _segment_ORDinP[*c_element], c_element_ring_size
+							_segment_ORDinP[possible_adjacent_idx], _segment_ORDinP[c_element_idx], c_element_ring_size
 						);
 						if ((segment_distance % 2==0) & (segment_distance!=0)) {
 							delete_element = true;
@@ -283,21 +320,24 @@ namespace LxGeo
 			}
 		}
 
-		size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<size_t> c_connected_vertices_indices)
+		size_t SegmentGraph::create_segment_group(size_t c_group_id, std::vector<vertex_descriptor> c_connected_vertices_indices)
 		{
-			groups_map[c_group_id] = std::vector<size_t>();
+			boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
+				boost::get(boost::vertex_index, SG);
+			groups_map[c_group_id] = std::vector<vertex_descriptor>();
 			groups_map[c_group_id].reserve(c_connected_vertices_indices.size());
 			size_t newly_added_count = 0;
 			for (auto segment_id = c_connected_vertices_indices.begin(); segment_id != c_connected_vertices_indices.end(); ++segment_id)
 			{
-				if (vertcies_groups[*segment_id] == 0)
+				size_t segment_idx = vertex_index_map[*segment_id];
+				if (vertcies_groups[segment_idx] == 0)
 				{
 					groups_map[c_group_id].push_back(*segment_id);
-					vertcies_groups[*segment_id] = c_group_id;
+					vertcies_groups[segment_idx] = c_group_id;
 					newly_added_count++;
 				}
 
-				delete_vertex_related(*segment_id);
+				delete_vertex_related(segment_idx);
 			}
 			groups_map[c_group_id].shrink_to_fit();
 
@@ -396,9 +436,11 @@ namespace LxGeo
 					OGRLineString ogr_linestring;
 										
 					const Point_2& S1 = S.source();
-					ogr_linestring.addPoint(&OGRPoint(CGAL::to_double(S1.x()), CGAL::to_double(S1.y())));
+					auto ogr_s = OGRPoint(CGAL::to_double(S1.x()), CGAL::to_double(S1.y()));
+					ogr_linestring.addPoint(&ogr_s);
 					const Point_2& S2 = S.target();
-					ogr_linestring.addPoint(&OGRPoint(CGAL::to_double(S2.x()), CGAL::to_double(S2.y())));
+					auto ogr_t = OGRPoint(CGAL::to_double(S2.x()), CGAL::to_double(S2.y()));
+					ogr_linestring.addPoint(&ogr_t);
 					
 					OGRFeature* feature;
 					feature = OGRFeature::CreateFeature(target_layer->GetLayerDefn());
@@ -428,6 +470,8 @@ namespace LxGeo
 
 		void SegmentGraph::fuse_segments()
 		{
+			boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
+				boost::get(boost::vertex_index, SG);
 			IK_to_EK to_exact;
 			EK_to_IK to_inexact;
 			const double PREC = 1.0 / (1 << 30) / (1 << 10);
@@ -470,7 +514,7 @@ namespace LxGeo
 						//Segment_2 exact_c_segment = to_exact(c_segment);
 						//
 
-						size_t idx_in_all_segs = groups_map[c_groupe_idx][resp_idx];
+						vertex_descriptor idx_in_all_segs = groups_map[c_groupe_idx][resp_idx];
 
 						Point_2 source_projected = fitted_line.projection(c_segment.source());
 						Point_2 target_projected = fitted_line.projection(c_segment.target());
@@ -486,7 +530,7 @@ namespace LxGeo
 						//FT::set_relative_precision_of_to_double(PREC);
 						//Inexact_Point_2 source_projected(CGAL::to_double(exact_source_projected.x()), CGAL::to_double(exact_source_projected.y()));  //to_inexact(exact_source_projected); //
 						//Inexact_Point_2 target_projected(CGAL::to_double(exact_target_projected.x()), CGAL::to_double(exact_target_projected.y())); //to_inexact(exact_target_projected); //
-						_all_segments[idx_in_all_segs] = Segment_2(source_projected, target_projected);
+						_all_segments[vertex_index_map[idx_in_all_segs]] = Segment_2(source_projected, target_projected);
 					}
 
 				}
@@ -501,10 +545,12 @@ namespace LxGeo
 
 		void SegmentGraph::get_respective_segment(size_t groupe_idx, std::vector<Segment_2*>& respective_segments)
 		{
-			std::vector<size_t> respective_segments_indices = groups_map[groupe_idx];
+			boost::property_map<BoostSegmentGraph, boost::vertex_index_t>::type vertex_index_map =
+				boost::get(boost::vertex_index, SG);
+			std::vector<vertex_descriptor> respective_segments_indices = groups_map[groupe_idx];
 			for (size_t idx = 0; idx < respective_segments_indices.size(); ++idx)
 			{
-				respective_segments.push_back(&(_all_segments[respective_segments_indices[idx]]));
+				respective_segments.push_back(&(_all_segments[vertex_index_map[respective_segments_indices[idx]]]));
 			}
 		}
 		/*
@@ -588,6 +634,7 @@ namespace LxGeo
 			OGRFeature* feature; 
 			OGRPolygon current_polygon;
 			
+			/*
 			for (OGRLinearRing ring : ex_int_rings)
 			{
 				// simplify rings
@@ -597,7 +644,26 @@ namespace LxGeo
 				for (const OGRPoint& ring_point : ring) initial_ring_vector.push_back(Inexact_Point_2(ring_point.getX(), ring_point.getY()));
 				simplified_ring_vector = simplify_aberrant_polygon(initial_ring_vector);
 				OGRLinearRing copy_ring;
-				for (const Inexact_Point_2& c_point : simplified_ring_vector) copy_ring.addPoint(&OGRPoint(c_point.x(), c_point.y()));
+				for (const Inexact_Point_2& c_point : simplified_ring_vector) {
+					auto cp = OGRPoint(c_point.x(), c_point.y());
+					copy_ring.addPoint(&cp);
+				}
+				if (copy_ring.getNumPoints() > 2)	current_polygon.addRing(&copy_ring);
+			}
+			*/
+			for (OGRLinearRing ring : ex_int_rings)
+			{
+				// simplify rings
+				std::vector<Inexact_Point_2> initial_ring_vector, simplified_ring_vector;
+				initial_ring_vector.reserve(ring.getNumPoints());
+				simplified_ring_vector.reserve(ring.getNumPoints());
+				for (const OGRPoint& ring_point : ring) initial_ring_vector.push_back(Inexact_Point_2(ring_point.getX(), ring_point.getY()));
+				simplified_ring_vector = simplify_aberrant_ring(initial_ring_vector.begin(), initial_ring_vector.end());
+				OGRLinearRing copy_ring;
+				for (const Inexact_Point_2& c_point : simplified_ring_vector) {
+					auto cp = OGRPoint(c_point.x(), c_point.y());
+					copy_ring.addPoint(&cp);
+				}
 				if (copy_ring.getNumPoints() > 2)	current_polygon.addRing(&copy_ring);
 			}
 			if (current_polygon.getExteriorRing()) {
@@ -685,12 +751,8 @@ namespace LxGeo
 				//Create output layers datasets			
 
 				for (size_t layer_id = 0; layer_id < params->paths.size(); ++layer_id) {
-
-					// file_path constructions
-					boost::filesystem::path c_out_basename(fmt::format("l_{}.shp", layer_id));
-					boost::filesystem::path outdir(params->temp_dir);
-					boost::filesystem::path c_full_path = outdir / c_out_basename;
-					params->regularized_layers_path.push_back(c_full_path);
+										
+					boost::filesystem::path c_full_path = params->regularized_layers_path[layer_id];
 
 					outlayers_datasets_map[layer_id] = driver->Create(c_full_path.string().c_str(), 0, 0, 0, GDT_Unknown, NULL);
 					if (outlayers_datasets_map[layer_id] == NULL) {
@@ -716,8 +778,10 @@ namespace LxGeo
 					short int last_s_PID=0;
 					short int last_s_LID=0;
 
-					for (size_t current_segment_index = 0; current_segment_index < (_all_segments.size() - 1); ++current_segment_index) {
+					for (size_t current_segment_index = 0; current_segment_index < (_all_segments.size()); ++current_segment_index) {
 
+						if (current_segment_index == 99)
+							BOOST_LOG_TRIVIAL(debug) << "check";
 						/*if (_segment_LID[current_segment_index] == 0 && _segment_PID[current_segment_index] == 27 && _segment_ORDinP[current_segment_index] == 0)
 							BOOST_LOG_TRIVIAL(debug) << "check this";*/
 
@@ -747,7 +811,7 @@ namespace LxGeo
 						// adding point to rings (in all cases)
 						Segment_2 next_segment_in_polygon;
 						// below is to assure next segment is in the same polygon
-						if (_segment_ORDinP[current_segment_index + 1] != 0) next_segment_in_polygon = _all_segments[current_segment_index + 1];
+						if (current_segment_index!=_all_segments.size()-1 && _segment_ORDinP[current_segment_index + 1] != 0) next_segment_in_polygon = _all_segments[current_segment_index + 1];
 						else {
 							size_t next_segment_idx = current_segment_index - _segment_ORDinP[current_segment_index];
 							assert(_segment_ORDinP[next_segment_idx] == 0);
@@ -763,7 +827,10 @@ namespace LxGeo
 						get_consecutive_segments_connection_point(_all_segments[current_segment_index], next_segment_in_polygon, connection_points);						
 						
 						FT::set_relative_precision_of_to_double(Constants::PREC);
-						for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(CGAL::to_double(connection_point.x()), CGAL::to_double(connection_point.y())));
+						for (auto connection_point : connection_points) {
+							auto cp = OGRPoint(CGAL::to_double(connection_point.x()), CGAL::to_double(connection_point.y()));
+							current_ring.addPoint(&cp);
+						}
 					}
 
 					//add last polygon
@@ -771,7 +838,10 @@ namespace LxGeo
 					std::vector<Point_2> connection_points;
 					get_consecutive_segments_connection_point(_all_segments[_all_segments.size() - 1], next_segment_in_polygon, connection_points);
 					FT::set_relative_precision_of_to_double(Constants::PREC);
-					for (auto connection_point : connection_points) current_ring.addPoint(&OGRPoint(CGAL::to_double(connection_point.x()), CGAL::to_double(connection_point.y())));
+					for (auto connection_point : connection_points) {
+						auto cp = OGRPoint(CGAL::to_double(connection_point.x()), CGAL::to_double(connection_point.y()));
+						current_ring.addPoint(&cp);
+					}
 					ex_int_rings.push_back(OGRLinearRing(current_ring));
 					add_polygon_to_layer(ex_int_rings, outlayers_datasets_map[_segment_LID[_all_segments.size()-1]]->GetLayer(0), _all_segments.size()-1);
 

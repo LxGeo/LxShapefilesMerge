@@ -62,6 +62,14 @@ namespace LxGeo
 				segment_RRSize,
 				apply_srs_transform);
 
+			// file_path constructions
+			for (size_t layer_id = 0; layer_id < params->paths.size(); ++layer_id) {
+				boost::filesystem::path c_out_basename(fmt::format("l_{}.shp", layer_id));
+				boost::filesystem::path outdir(params->temp_dir);
+				boost::filesystem::path c_full_path = outdir / c_out_basename;
+				params->regularized_layers_path.push_back(c_full_path);
+			}
+
 			// Regularizing Segments
 			regularize_segments(all_segments,
 				segment_LID,
@@ -69,16 +77,19 @@ namespace LxGeo
 				segment_ORDinP,
 				segment_RRSize);
 
+
 			std::string total_overlay_layer_path;
-			total_overlay_layer_path = overlay_union_layers(params->regularized_layers_path);
+			//total_overlay_layer_path = overlay_union_layers(params->regularized_layers_path);
 
 			all_segments.clear();
 			segment_LID.clear();
 			segment_PID.clear();
 			segment_ORDinP.clear();
+			
+			return;
 
 			// total overlay union path
-			std::string temp_overlay_layer_path = params->temp_dir + "\\union_1.shp";
+			std::string temp_overlay_layer_path = params->temp_dir + "\\grass_fusion\\U_0_1_2_3.shp";
 			//  facet labeling optimizer
 
 			std::vector<std::string> regularized_layers_path_string;
@@ -88,6 +99,7 @@ namespace LxGeo
 
 			Ol.construct_graph();
 
+			Ol.log_subgraphs();
 
 		}
 	}

@@ -16,19 +16,19 @@ struct EdgeData
 };
 
 
-//typedef boost::adjacency_list<boost::listS, boost::listS,
-//    boost::undirectedS,
-//    //VertexData,
-//    //boost::property<boost::vertex_index_t, size_t, boost::property< boost::vertex_centrality_t, double> >,
-//    //boost::property<boost::edge_weight_t, double, EdgeData>
-//    boost::property<boost::vertex_index_t, size_t>,
-//    boost::no_property
-//> BoostSegmentGraph;
-
-typedef boost::adjacency_matrix<boost::undirectedS,
+typedef boost::adjacency_list<boost::mapS, boost::vecS,
+    boost::undirectedS,
+    //VertexData,
+    //boost::property<boost::vertex_index_t, size_t, boost::property< boost::vertex_centrality_t, double> >,
+    //boost::property<boost::edge_weight_t, double, EdgeData>
     boost::property<boost::vertex_index_t, size_t>,
     boost::no_property
->BoostSegmentGraph;
+> BoostSegmentGraph;
+
+//typedef boost::adjacency_matrix<boost::undirectedS,
+//    boost::property<boost::vertex_index_t, size_t>,
+//    boost::no_property
+//>BoostSegmentGraph;
 
 typedef boost::graph_traits<BoostSegmentGraph>::vertex_iterator vertex_iterator;
 typedef boost::graph_traits<BoostSegmentGraph>::vertex_descriptor vertex_descriptor;
